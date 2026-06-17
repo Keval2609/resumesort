@@ -35,4 +35,4 @@ artifacts/
 # Ignored specific files
 validate_submission.py
 final_output.csv
-submission_metadata.yaml
+
