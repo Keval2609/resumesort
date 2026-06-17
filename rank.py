@@ -40,7 +40,7 @@ logging.basicConfig(
 log = logging.getLogger("rank")
 
 # ── constants ─────────────────────────────────────────────────────────────────
-BM25_PREFILTER_K  = 3000   # candidates passed to full scorer after BM25
+BM25_PREFILTER_K  = 5000   # candidates passed to full scorer after BM25
 TOP_K             = 100    # final submission size (spec requirement)
 WALL_CLOCK_BUDGET = 280    # seconds — leave 20s headroom under 5-min limit
 
@@ -213,22 +213,13 @@ def run_pipeline(candidates: list[dict]) -> list[dict]:
              f"{' '.join(query_tokens[:12])} ...")
 
     bm25_hits = bm25.retrieve(query_tokens, top_k=BM25_PREFILTER_K)
-    hit_ids   = {doc_id for doc_id, _ in bm25_hits}
-
-    # Always include BM25 misses for hard-gate-exempt checking;
-    # add them at the back with score=0 so they can still be gated.
-    # (Ensures we never miss a great candidate with unusual vocab.)
-    all_hit_ids = hit_ids | {
-        c["candidate_id"] for c in candidates
-        if c["redrob_signals"].get("open_to_work_flag", False)
-    }
+    all_hit_ids   = {doc_id for doc_id, _ in bm25_hits}
 
     candidates_to_score = [
         c for c in candidates if c["candidate_id"] in all_hit_ids
     ]
     log.info(
-        f"BM25 pre-filter: {len(bm25_hits)} hits + "
-        f"{len(candidates_to_score)-len(bm25_hits)} open-to-work additions "
+        f"BM25 pre-filter: {len(bm25_hits)} hits "
         f"→ {len(candidates_to_score)} to score  "
         f"(took {time.perf_counter()-t1:.1f}s)"
     )

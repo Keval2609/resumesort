@@ -9,6 +9,8 @@ import numpy as np
 from datetime import date, datetime
 from typing import Optional
 
+from honeypot import is_honeypot
+
 TODAY = date(2026, 6, 13)
 
 # ─── JD Constants ─────────────────────────────────────────────────────────────
@@ -112,64 +114,7 @@ def _normalize_company(name: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════════
 # HONEYPOT DETECTION
 # ═══════════════════════════════════════════════════════════════════════════════
-
-def is_honeypot(candidate: dict) -> bool:
-    """
-    Returns True if candidate has impossible/suspicious profile signals.
-    Honeypots are forced to score 0 — never appear in top 100.
-    """
-    flags = 0
-
-    # 1. Experience > tenure at all listed companies combined
-    total_yoe = candidate["profile"].get("years_of_experience", 0)
-    total_months = sum(
-        j.get("duration_months", 0)
-        for j in candidate.get("career_history", [])
-    )
-    if total_months > 0 and total_yoe > (total_months / 12) * 1.4:
-        flags += 1
-
-    # 2. Skill duration > career length
-    yoe_months = total_yoe * 12
-    for skill in candidate.get("skills", []):
-        dur = skill.get("duration_months", 0)
-        if dur > yoe_months * 1.3 and dur > 0:
-            flags += 1
-            break
-
-    # 3. Expert proficiency in 8+ skills (impossible breadth)
-    expert_count = sum(
-        1 for s in candidate.get("skills", [])
-        if s.get("proficiency") == "expert"
-    )
-    if expert_count >= 8:
-        flags += 1
-
-    # 4. salary min > max (inverted range — data error or trap)
-    sal = candidate["redrob_signals"].get("expected_salary_range_inr_lpa", {})
-    sal_min = sal.get("min", 0)
-    sal_max = sal.get("max", 0)
-    if sal_min > 0 and sal_max > 0 and sal_min > sal_max * 1.5:
-        flags += 1
-
-    # 5. Current company start date implies impossible tenure vs YoE
-    for job in candidate.get("career_history", []):
-        if job.get("is_current"):
-            try:
-                start = datetime.strptime(job["start_date"], "%Y-%m-%d").date()
-                tenure_yrs = (TODAY - start).days / 365
-                if tenure_yrs < 0:  # future start date
-                    flags += 1
-            except Exception:
-                pass
-
-    # 6. signup_date after last_active_date
-    signup_days = _days_since(candidate["redrob_signals"].get("signup_date", "2000-01-01"))
-    active_days = _days_since(candidate["redrob_signals"].get("last_active_date", "2000-01-01"))
-    if signup_days < active_days:  # signed up AFTER last active — impossible
-        flags += 1
-
-    return flags >= 2
+# Handled via external honeypot.py module now.
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -236,11 +181,11 @@ def score_skills(candidate: dict) -> float:
     neg_penalty = _norm(neg_ratio, 0, 0.5) * 0.25  # max 25% penalty
 
     # Consulting-only career penalty
-    companies = {
-        _normalize_company(j.get("company", ""))
-        for j in candidate.get("career_history", [])
-    }
-    all_consulting = all(c in CONSULTING_FIRMS for c in companies if c)
+    career = candidate.get("career_history", [])
+    all_consulting = bool(career) and all(
+        any(cf in j.get("company", "").lower() for cf in CONSULTING_FIRMS)
+        for j in career
+    )
     consulting_penalty = 0.20 if all_consulting else 0.0
 
     raw = (must_score * 0.50 + prof_avg * 0.30 + nice_score * 0.20)
@@ -263,8 +208,7 @@ def score_experience(candidate: dict) -> float:
 
     # Applied-ML depth: sum of AI/ML role months vs total
     ai_keywords = {"ml", "machine learning", "ai", "nlp", "data science",
-                   "applied", "research", "engineer", "ranking", "retrieval",
-                   "recommendation", "search", "embedding"}
+                   "ranking", "retrieval", "recommendation", "embedding"}
     total_months, ai_months = 0, 0
     for job in candidate.get("career_history", []):
         dur = job.get("duration_months", 0)
