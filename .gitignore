@@ -1,0 +1,38 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Data and Hackathon Dataset Folders
+India_runs_data_and_ai_challenge/
+*.jsonl
+*.jsonl.gz
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+
+# Artifacts
+artifacts/
+!artifacts/.gitkeep
+
+# Ignored specific files
+validate_submission.py
+final_output.csv
+submission_metadata.yaml
