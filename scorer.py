@@ -9,8 +9,6 @@ import numpy as np
 from datetime import date, datetime
 from typing import Optional
 
-from honeypot import is_honeypot
-
 TODAY = date(2026, 6, 13)
 
 # ─── JD Constants ─────────────────────────────────────────────────────────────
@@ -114,7 +112,84 @@ def _normalize_company(name: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════════
 # HONEYPOT DETECTION
 # ═══════════════════════════════════════════════════════════════════════════════
-# Handled via external honeypot.py module now.
+
+HONEYPOT_THRESHOLD = 0.65  # raised from 0.40 — reduces false positives
+
+def honeypot_score(candidate: dict) -> float:
+    """
+    Weighted probability score for honeypot detection.
+    Each signal contributes a weight; sum >= HONEYPOT_THRESHOLD → honeypot.
+
+    Single signals alone never cross 0.65 — requires combination.
+    Weights chosen so two clear impossibilities always flag.
+    """
+    score = 0.0
+
+    total_yoe = candidate["profile"].get("years_of_experience", 0)
+    total_months = sum(
+        j.get("duration_months", 0)
+        for j in candidate.get("career_history", [])
+    )
+
+    # Signal 1: Stated YoE > sum of job tenures × 1.4 (impossible timeline)
+    if total_months > 0 and total_yoe > (total_months / 12) * 1.4:
+        score += 0.35
+
+    # Signal 2: Any skill used longer than entire career × 1.3
+    yoe_months = total_yoe * 12
+    for skill in candidate.get("skills", []):
+        dur = skill.get("duration_months", 0)
+        if dur > 0 and yoe_months > 0 and dur > yoe_months * 1.3:
+            score += 0.30
+            break
+
+    # Signal 3: Expert proficiency in 8+ skills (impossible breadth)
+    expert_count = sum(
+        1 for s in candidate.get("skills", [])
+        if s.get("proficiency") == "expert"
+    )
+    if expert_count >= 8:
+        score += 0.30
+
+    # Signal 4: Salary min > max × 1.5 (inverted range — data fabrication)
+    sal = candidate["redrob_signals"].get("expected_salary_range_inr_lpa", {})
+    sal_min = sal.get("min", 0)
+    sal_max = sal.get("max", 0)
+    if sal_min > 0 and sal_max > 0 and sal_min > sal_max * 1.5:
+        score += 0.50  # strong signal — salary inversion is a clear trap
+
+    # Signal 5: Current job start date is in the future
+    for job in candidate.get("career_history", []):
+        if job.get("is_current"):
+            try:
+                start = datetime.strptime(job["start_date"], "%Y-%m-%d").date()
+                if start > TODAY:
+                    score += 0.40
+            except Exception:
+                pass
+
+    # Signal 6: signup_date is AFTER last_active_date (temporally impossible)
+    signup_days = _days_since(
+        candidate["redrob_signals"].get("signup_date", "2000-01-01")
+    )
+    active_days = _days_since(
+        candidate["redrob_signals"].get("last_active_date", "2000-01-01")
+    )
+    if signup_days < active_days:
+        score += 0.35
+
+    return min(score, 1.0)
+
+
+def is_honeypot(candidate: dict) -> bool:
+    """
+    Returns True if candidate has impossible/suspicious profile signals.
+    Honeypots are forced to score 0 — never appear in top 100.
+
+    Threshold 0.65: no single signal alone flags a candidate.
+    Requires at least two clear impossibilities.
+    """
+    return honeypot_score(candidate) >= HONEYPOT_THRESHOLD
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -181,11 +256,11 @@ def score_skills(candidate: dict) -> float:
     neg_penalty = _norm(neg_ratio, 0, 0.5) * 0.25  # max 25% penalty
 
     # Consulting-only career penalty
-    career = candidate.get("career_history", [])
-    all_consulting = bool(career) and all(
-        any(cf in j.get("company", "").lower() for cf in CONSULTING_FIRMS)
-        for j in career
-    )
+    companies = {
+        _normalize_company(j.get("company", ""))
+        for j in candidate.get("career_history", [])
+    }
+    all_consulting = all(c in CONSULTING_FIRMS for c in companies if c)
     consulting_penalty = 0.20 if all_consulting else 0.0
 
     raw = (must_score * 0.50 + prof_avg * 0.30 + nice_score * 0.20)
@@ -208,7 +283,8 @@ def score_experience(candidate: dict) -> float:
 
     # Applied-ML depth: sum of AI/ML role months vs total
     ai_keywords = {"ml", "machine learning", "ai", "nlp", "data science",
-                   "ranking", "retrieval", "recommendation", "embedding"}
+                   "applied", "research", "engineer", "ranking", "retrieval",
+                   "recommendation", "search", "embedding"}
     total_months, ai_months = 0, 0
     for job in candidate.get("career_history", []):
         dur = job.get("duration_months", 0)
@@ -399,13 +475,9 @@ def score_trust(sig: dict) -> float:
     offer_acc = sig.get("offer_acceptance_rate", -1)
     offer_score = float(np.clip(offer_acc, 0.0, 1.0)) if offer_acc >= 0 else 0.5
 
-    connections = sig.get("connection_count", 0)
-    connection_score = _lognorm(connections, 0, 500)
-
     return float(np.clip(
-        verified_email * 0.20 + verified_phone * 0.15 +
-        linkedin * 0.10 + github_score * 0.20 + offer_score * 0.15 +
-        connection_score * 0.20,
+        verified_email * 0.25 + verified_phone * 0.20 +
+        linkedin * 0.15 + github_score * 0.25 + offer_score * 0.15,
         0.0, 1.0
     ))
 
