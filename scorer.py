@@ -113,7 +113,7 @@ def _normalize_company(name: str) -> str:
 # HONEYPOT DETECTION
 # ═══════════════════════════════════════════════════════════════════════════════
 
-HONEYPOT_THRESHOLD = 0.65  # raised from 0.40 — reduces false positives
+HONEYPOT_THRESHOLD = 0.65  
 
 def honeypot_score(candidate: dict) -> float:
     """

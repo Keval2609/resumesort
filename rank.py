@@ -295,8 +295,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--out",
         type=Path,
-        default=Path("./team_xxx.csv"),
-        help="Output CSV path (e.g. team_xxx.csv)",
+        default=Path("./final_output.csv"),
+        help="Output CSV path (e.g. final_output.csv)",
     )
     p.add_argument(
         "--sample",
