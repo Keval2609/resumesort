@@ -22,7 +22,7 @@ github_repo: "https://github.com/Keval2609/resumesort.git"
 
 sandbox_link: "https://resumesort-signalovernoise-108.streamlit.app/"
 
-# ✅ FIXED: relative path — works on any OS inside Docker
+# Relative path — works on any OS inside Docker
 reproduce_command: "python rank.py --candidates ./candidates.jsonl --out ./SignalOverNoise-108.csv"
 
 # ============================================================================
