@@ -1,6 +1,6 @@
 # Redrob Hackathon — Intelligent Candidate Ranking
 
-**Team:** Team_Keval_108  
+**Team:** SignalOverNoise_108
 **Challenge:** Intelligent Candidate Discovery & Ranking  
 **Target role:** Senior AI Engineer — Founding Team  
 
@@ -40,7 +40,7 @@ resumesort/
 ## Reproduce command
 
 ```bash
-python rank.py --candidates ./candidates.jsonl --out ./final_output.csv
+python rank.py --candidates ./candidates.jsonl --out ./SignalOverNoise_108.csv
 ```
 
 This single command:
