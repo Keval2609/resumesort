@@ -302,9 +302,16 @@ def generate_reasoning(rank: int, candidate: dict, score: float) -> str:
 
     # Rank-tone adjustment
     if rank <= 10 and not concern_seg:
-        parts.append("Strong overall fit for founding AI engineer role.")
+        top_skill = required[0] if required else "ML/IR"
+        parts.append(
+            f"Ranks {rank}/100; {top_skill} expertise and product-company "
+            f"background align closely with founding AI engineer mandate."
+        )
     elif rank >= 85:
-        parts.append("Marginal fit; included at tail of ranking.")
+        parts.append(
+            f"Ranks {rank}/100; included at ranking tail — "
+            f"relevant skills present but engagement or location concerns reduce confidence."
+        )
 
     reasoning = " ".join(parts)
 
