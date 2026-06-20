@@ -66,7 +66,7 @@ python rank.py --candidates ./candidates.jsonl --out ./SignalOverNoise-108.csv
 6. Selects the top 100 candidates, guarantees score monotonicity, and generates reasoning.
 7. Writes the results to a CSV and validates the output format.
 
-**Performance:** Completes in ~3.6 minutes on a standard 16 GB CPU-only machine.
+**Performance:** Completes in ~2.1 minutes on a standard 16 GB CPU-only machine.
 
 ### 3. Run the Interactive Sandbox (Streamlit)
 
@@ -86,7 +86,6 @@ To efficiently handle 100K profiles, we first flatten each candidate's high-valu
 ### 2. Hard Gates
 Candidates are instantly excluded or heavily penalized if they fail basic criteria:
 - Not open to work (`Score = 0`)
-- Expected salary > 130% of JD max (`Score = 0`)
 - Work mode hard mismatch (e.g., remote-only but requires relocation)
 
 ### 3. Honeypot Detection
