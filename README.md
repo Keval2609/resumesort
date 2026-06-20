@@ -1,6 +1,6 @@
 # Redrob Hackathon — Intelligent Candidate Ranking
 
-**Team:** Antigravity-Redrob  
+**Team:** Team_Keval_108  
 **Challenge:** Intelligent Candidate Discovery & Ranking  
 **Target role:** Senior AI Engineer — Founding Team  
 
@@ -13,7 +13,6 @@ resumesort/
 ├── rank.py              # Main pipeline script — reads candidates, coordinates scoring and output
 ├── bm25.py              # TF-IDF/BM25 retrieval system
 ├── scorer.py            # Scoring function with behavioral and trust modifiers
-├── output.py            # CSV writer — converts ranked JSON to submission CSV
 ├── honeypot.py          # Honeypot detection — flags impossible profiles
 ├── reasoning.py         # Stage 4 reasoning generator
 ├── requirements.txt
@@ -87,7 +86,7 @@ rank.py  ──────────── Score each candidate
 reasoning.py         Generate Stage 4-compliant per-candidate reasoning
        │
        ▼
-output.py            Write final_output.csv (100 rows, validated)
+rank.py              Write final_output.csv (100 rows, validated)
 ```
 
 ---
@@ -100,7 +99,7 @@ output.py            Write final_output.csv (100 rows, validated)
 | Honeypot detected | Score = 0 (excluded) |
 | Notice period > 180d | Score = 0 |
 | Work mode hard mismatch | Score multiplier × 0.3 |
-| Salary > 130% of JD max | Score multiplier × 0.5 |
+| Salary > 130% of JD max | Score = 0 |
 
 ---
 

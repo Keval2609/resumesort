@@ -30,7 +30,7 @@ def _parse_date(s):
 
 
 def _today():
-    return date.today()
+    return date(2026, 6, 13)  # Match scorer.py
 
 
 # ── Individual detectors ─────────────────────────────────────────────────────

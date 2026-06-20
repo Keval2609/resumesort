@@ -23,8 +23,6 @@ import sys
 import time
 from pathlib import Path
 
-import numpy as np
-
 # ── local pipeline modules ────────────────────────────────────────────────────
 sys.path.insert(0, str(Path(__file__).parent))
 from bm25 import build_index, tokenize, JD_QUERY
@@ -51,7 +49,6 @@ WALL_CLOCK_BUDGET = 280    # seconds — leave 20s headroom under 5-min limit
 
 def load_candidates(path: Path) -> list[dict]:
     """Load candidates.jsonl, .jsonl.gz, or .json array → list[dict]."""
-    """Load candidates.jsonl or candidates.jsonl.gz → list[dict]."""
     log.info(f"Loading candidates from {path} ...")
     t0 = time.perf_counter()
 
