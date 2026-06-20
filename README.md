@@ -40,7 +40,7 @@ resumesort/
 ## Reproduce command
 
 ```bash
-python rank.py --candidates ./candidates.jsonl --out ./SignalOverNoise_108.csv
+python rank.py --candidates ./candidates.jsonl --out ./SignalOverNoise-108.csv
 ```
 
 This single command:

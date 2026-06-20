@@ -3,7 +3,7 @@
 # ============================================================================
 # Team identity
 # ============================================================================
-team_name: "SignalOverNoise_108"
+team_name: "SignalOverNoise-108"
 
 primary_contact:
   name: "Keval Raiyani"
@@ -20,10 +20,10 @@ team_members:
 # ============================================================================
 github_repo: "https://github.com/Keval2609/resumesort.git"
 
-sandbox_link: "https://huggingface.co/spaces/YOUR_USERNAME/redrob-ranker"
+sandbox_link: "https://resumesort-signalovernoise-108.streamlit.app/"
 
 # ✅ FIXED: relative path — works on any OS inside Docker
-reproduce_command: "python rank.py --candidates ./candidates.jsonl --out ./final_output.csv"
+reproduce_command: "python rank.py --candidates ./candidates.jsonl --out ./SignalOverNoise-108.csv"
 
 # ============================================================================
 # Compute environment
