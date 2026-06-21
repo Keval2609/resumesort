@@ -36,6 +36,7 @@ artifacts/
 # Ignored specific files
 validate_submission.py
 final_output.csv
-
+chunker.py
 team_xxx.csv
 *.csv
+extract_sample.py
