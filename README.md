@@ -6,128 +6,180 @@
 
 ---
 
-## 🎯 Overview
+## Overview
 
-This repository contains our submission for the Redrob Hackathon. We've built a deterministic, fully local, and highly efficient candidate ranking pipeline. It ranks up to 100K candidates without relying on external LLM APIs, GPUs, or network calls during the ranking process. 
+Deterministic, fully local candidate ranking pipeline for 100K profiles.  
+No LLMs, no GPUs, no network calls during ranking.
 
-The pipeline uses a combination of BM25 pre-filtering, rigorous honeypot detection, and a carefully weighted scoring mechanism to identify the best candidates based on Relevance (70%) and Behavioral (30%) factors.
+Pipeline: **BM25 pre-filter → Hard gates → Honeypot detection → Full scoring → Ranked CSV**  
+Formula: `FinalScore = 0.70 × RelevanceScore + 0.30 × BehavioralScore`
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```
 resumesort/
-├── rank.py                  # Main CLI entry point — orchestrates the entire ranking pipeline
-├── app.py                   # Streamlit interactive sandbox for testing candidate batches
-├── bm25.py                  # Custom TF-IDF/BM25 inverted index for fast pre-filtering
-├── scorer.py                # Core scoring logic (Relevance + Behavioral metrics)
-├── honeypot.py              # Synthetic/impossible profile detection
-├── reasoning.py             # Stage 4-compliant justification generator for candidate ranks
-├── validate_submission.py   # Strict CSV output validator
-├── submission_metadata.yaml # Metadata, compute declaration, and methodology summary
-├── requirements.txt         # Python dependencies
+├── rank.py                   # Main CLI — orchestrates the full pipeline
+├── app.py                    # Streamlit sandbox (≤100 candidates, interactive)
+├── bm25.py                   # BM25 inverted index for fast pre-filtering
+├── scorer.py                 # Core scorer (Relevance + Behavioral) — production version
+├── honeypot.py               # Synthetic profile detector (standalone CLI + library)
+├── reasoning.py              # Stage 4-compliant reasoning generator
+├── submission_metadata.yaml  # Team metadata, methodology, compute declarations
+├── requirements.txt          # Python dependencies (numpy, pandas, streamlit)
 └── .gitignore
 ```
 
 ---
 
-## 🚀 Getting Started
+## Quickstart
 
-### 1. Setup Environment
+### 1. Setup
 
 ```bash
-# Create and activate a virtual environment
 python -m venv .venv
 
 # Windows
 .venv\Scripts\activate
-# Linux/Mac
+# Linux / Mac
 source .venv/bin/activate
 
-# Install requirements
 pip install -r requirements.txt
 ```
 
-### 2. Run the Ranking Pipeline (CLI)
-
-To rank the full 100K candidates dataset and generate the final output CSV:
+### 2. Run Full Pipeline (CLI)
 
 ```bash
 python rank.py --candidates ./candidates.jsonl --out ./SignalOverNoise-108.csv
 ```
 
-**What this command does:**
-1. Loads all candidates.
-2. Builds a BM25 index and retrieves the top 5,000 matches.
-3. Applies Hard Gates (e.g., open-to-work, salary expectations).
-4. Runs Honeypot Detection to flag synthetic profiles (score = 0).
-5. Computes Relevance and Behavioral scores for the remaining candidates.
-6. Selects the top 100 candidates, guarantees score monotonicity, and generates reasoning.
-7. Writes the results to a CSV and validates the output format.
+Produces a spec-compliant CSV: 100 rows, header, UTF-8, monotone scores.  
+**Runtime:** ~2 min on a 16 GB CPU-only machine.
 
-**Performance:** Completes in ~2.1 minutes on a standard 16 GB CPU-only machine.
+Optional flags:
 
-### 3. Run the Interactive Sandbox (Streamlit)
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--candidates` | `./data/candidates.jsonl.gz` | Path to `.jsonl` or `.jsonl.gz` |
+| `--out` | `./final_output.csv` | Output CSV path |
+| `--sample N` | — | Score only first N candidates (local testing) |
 
-We also provide a Streamlit app to interactively explore the ranking logic on smaller datasets (≤ 100 candidates):
+### 3. Interactive Sandbox (Streamlit)
 
 ```bash
 streamlit run app.py
 ```
 
----
+Accepts a `.json` array or `.jsonl` file (≤100 candidates). Runs the full pipeline and outputs a downloadable ranked CSV.  
+Live deployment: [resumesort-signalovernoise-108.streamlit.app](https://resumesort-signalovernoise-108.streamlit.app/)
 
-## 🧠 Pipeline Architecture
-
-### 1. BM25 Pre-filtering
-To efficiently handle 100K profiles, we first flatten each candidate's high-value fields (titles, core skills, summaries) into a weighted text blob. We then build an in-memory inverted index and retrieve the top 5,000 candidates using the BM25 algorithm against our tailored Job Description query.
-
-### 2. Hard Gates
-Candidates are instantly excluded or heavily penalized if they fail basic criteria:
-- Not open to work (`Score = 0`)
-- Work mode hard mismatch (e.g., remote-only but requires relocation)
-
-### 3. Honeypot Detection
-Our `honeypot.py` script rigorously identifies synthetic or impossible profiles (e.g., 5 expert skills with < 3 years of experience, time-traveling career dates, or 0-duration skills with 20+ endorsements). Candidates exceeding the threshold are excluded (`Score = 0`).
-
-### 4. Scoring Formula
-**Final Score = 0.70 × Relevance + 0.30 × Behavioral**
-
-**Relevance Score (70%):**
-- **Skills (45%):** Keyword matching against Must-Have (e.g., Sentence Transformers, BM25) and Good-To-Have skills, with penalties for irrelevant focuses (e.g., pure Computer Vision).
-- **Experience (25%):** Penalizes pure research or title-chasers; rewards applied ML/AI depth in product companies.
-- **Title / Career (15%):** Exact or strong partial matches to "AI Engineer", "ML Engineer", etc.
-- **Education (8%):** Based on institution tier and relevance of study field.
-- **Location (5%):** Proximity to preferred tier-1 cities and willingness to relocate.
-- **Certifications (2%):** Bonus for relevant ML certifications.
-
-**Behavioral Score (30%):**
-- **Readiness (30%):** Notice period length and recent platform activity.
-- **Recruiter Signals (25%):** Profile views, searches, and saves.
-- **Professionalism (20%):** Recruiter response rates and interview completion rates.
-- **Trust (15%):** Verified contacts, linked GitHub, and offer acceptance history.
-- **Skills Quality (10%):** Endorsements and platform skill assessment scores.
-
-### 5. Reasoning Generation
-For the final Top 100, `reasoning.py` dynamically builds a Stage 4-compliant summary citing specific candidate facts, JD alignment, and honest concerns (e.g., salary bands, location issues), ensuring top-ranked candidates have positive tones while lower-ranked ones highlight genuine risks.
-
----
-
-## ✅ Validation & Testing
-
-Ensure your output meets all challenge constraints:
+### 4. Validate Output
 
 ```bash
 python validate_submission.py SignalOverNoise-108.csv
 ```
-*(Checks for exactly 100 rows, strict header format, monotonically decreasing scores, and valid CAND_ IDs).*
+
+Checks: 100 rows, correct header, unique ranks 1–100, unique candidate IDs, monotone scores, valid CAND_ IDs.
 
 ---
 
-## 🤖 Compute & AI Declarations
+## Pipeline Architecture
 
-- **Hardware:** Developed and tested on Windows 11 Pro (4 cores, 16 GB RAM).
-- **Inference:** **CPU ONLY.** No GPUs were used during ranking.
-- **Network:** **100% Offline.** No external API or LLM calls are made during the execution of `rank.py`.
-- **AI Tools:** Antigravity AI and Claude were utilized exclusively for architecture planning, code review, and script generation. Candidate data was strictly processed locally.
+### Stage 1 — BM25 Pre-filter
+
+All 100K profiles are flattened into weighted text blobs. High-value fields (title, headline) are repeated 3×; core ML skills get extra TF weight. An in-memory inverted index retrieves the **top 5,000 BM25 candidates** against the JD query.
+
+### Stage 2 — Hard Gates
+
+Candidates are immediately excluded (score = 0.0) if they fail any gate:
+
+| Gate | Condition | Effect |
+|------|-----------|--------|
+| Not open to work | `open_to_work_flag = False` | Score = 0.0 (excluded) |
+| Salary too high | `salary_min > JD_max × 1.30` | Score = 0.0 (excluded) |
+| Work mode mismatch | `preferred_work_mode = remote` AND `willing_to_relocate = False` AND `country = India` | Score = 0.0 (excluded) |
+
+### Stage 3 — Honeypot Detection
+
+`scorer.py` runs an independent honeypot scorer (threshold = **0.65**). Flagged candidates are excluded before ranking. Detection signals include:
+
+- Skill `duration_months` > total YOE × 1.3  
+- Career total months >> declared YOE  
+- Salary range inverted (min > max)  
+- Future `start_date` on current job  
+- `last_active_date` before `signup_date`  
+- ≥8 expert-level skills (combined signal)
+
+> `honeypot.py` standalone CLI uses a lower threshold of **0.40** for broader audit use. The ranking pipeline always uses 0.65 from `scorer.py`.
+
+### Stage 4 — Scoring
+
+**Final Score = 0.70 × RelevanceScore + 0.30 × BehavioralScore**
+
+#### Relevance Score (70%)
+
+| Component | Weight | Key logic |
+|-----------|--------|-----------|
+| Skills | 45% | Must-have (sentence-transformers, FAISS, Qdrant, NDCG, Python, etc.) + good-to-have; penalties for CV/speech-primary, all-consulting career, irrelevant skills |
+| Experience | 25% | JD range 5–9 yr; depth ratio (AI/ML months ÷ total months); penalties for title-chasers (3+ stints <18mo), pure-research career (>70%), no product company |
+| Title match | 15% | Strong: ML/AI/NLP/Ranking engineer, Applied Scientist. Medium: SWE, Backend, Data Engineer. Weak: Marketing, Civil, Mechanical, etc. |
+| Education | 8% | Institution tier × field relevance (CS, ML, AI, Stats, NLP) |
+| Location | 5% | JD cities (1.0) → Tier-1 + willing to relocate (0.75) → Tier-1 no relocation (0.50) → Non-Tier-1 India + relocate (0.25) → non-Tier-1 India (0.10) → Abroad + relocate (0.15) → Abroad no relocation (0.0) |
+| Certifications | 2% | AWS ML, Google Professional ML, TF Developer, Deep Learning Specialization, etc. |
+
+#### Behavioral Score (30%)
+
+| Component | Weight | Key signals |
+|-----------|--------|-------------|
+| Readiness | 30% | Last active date, notice period (soft=30d, hard=90d), applications/30d |
+| Recruiter interest | 25% | Profile views, saves, search appearances (all /30d) |
+| Professionalism | 20% | Recruiter response rate, avg response time, interview completion rate |
+| Trust | 15% | Verified email/phone, LinkedIn linked, GitHub activity score, offer acceptance rate |
+| Skills quality | 10% | Platform assessment scores on must-have skills + endorsement count |
+
+### Stage 5 — Reasoning Generation
+
+`reasoning.py` generates a unique, fact-grounded justification per candidate (Stage 4 compliance):
+
+- Cites specific YOE, title, company, named skills
+- Connects to JD requirements explicitly
+- Acknowledges real concerns (notice period, salary, location, inactivity)
+- Tone matches rank (positive top-10, cautious bottom-15)
+- No templated endings — each row differs
+
+---
+
+## Key Design Decisions
+
+**Why BM25 over embeddings for pre-filter?**  
+Embedding 100K profiles in <5 min on CPU is not feasible. BM25 over a weighted text blob is ~10× faster, zero-dependency, and retrieves a high-recall top-5000 candidate set that the full scorer then refines.
+
+**Why 5000 for BM25 cutoff?**  
+Empirical: the full scorer runs ~5,000 candidates in ~90s. Going beyond risks the 5-min wall-clock budget.
+
+**Why `_is_consulting_firm()` instead of regex normalization?**  
+The previous `_normalize_company()` approach silently missed multi-word firms like "Tech Mahindra" (normalized to "tech_mahindra", not matched against "techmahindra"). Substring matching on raw lowercase fixes this correctly.
+
+**Why separate `honeypot.py` and inline `honeypot_score()` in `scorer.py`?**  
+`honeypot.py` is the full audit tool (11 detectors, probabilistic combination, CLI). The inline version in `scorer.py` is a faster subset tuned for the ranking pipeline's false-positive budget (~2% flag rate in top-5000).
+
+---
+
+## Compute Constraints (Spec-Compliant)
+
+| Constraint | Limit | Status |
+|------------|-------|--------|
+| Runtime | ≤ 5 min wall-clock | ~2 min ✓ |
+| RAM | ≤ 16 GB | ~2 GB peak ✓ |
+| Compute | CPU only | No GPU ✓ |
+| Network | Off | No external calls ✓ |
+| Disk | ≤ 5 GB intermediate | Negligible ✓ |
+
+---
+
+## AI Tools Declaration
+
+Used **Claude** and **Antigravity** for architecture planning, code review, and debugging.  
+No candidate data was sent to any external LLM.  
+All ranking logic is deterministic Python — zero LLM calls during `rank.py` execution.
