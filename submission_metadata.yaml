@@ -56,7 +56,7 @@ ai_usage_summary: |
 # ============================================================================
 methodology_summary: |
   Rule-based ranker with BM25 pre-filter + multi-factor scorer.
-  Pipeline: BM25 retrieval (top 3000) → hard gates (open-to-work, salary,
+  Pipeline: BM25 retrieval (top 5000) → hard gates (open-to-work, salary,
   work-mode) → honeypot detection → full scoring.
   FinalScore = 0.70 × RelevanceScore + 0.30 × BehavioralScore.
   Relevance weights: skills (0.45), experience (0.25), title (0.15),

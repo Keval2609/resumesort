@@ -40,3 +40,5 @@ chunker.py
 team_xxx.csv
 *.csv
 extract_sample.py
+extract_top100.py
+*.json

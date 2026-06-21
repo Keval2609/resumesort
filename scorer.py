@@ -25,6 +25,8 @@ JD_LOCATIONS = {
     "gurgaon", "bengaluru", "bangalore"
 }
 
+JD_PREFERRED_CITIES = {"noida", "pune"}   # JD says these are top-priority
+
 INDIA_TIER1_CITIES = {
     "noida", "pune", "hyderabad", "mumbai", "delhi", "delhi ncr",
     "gurgaon", "bengaluru", "bangalore", "chennai", "kolkata", "ahmedabad"
@@ -80,6 +82,13 @@ CONSULTING_FIRMS = {
     "capgemini", "hcl", "tech mahindra", "mindtree",
 }
 
+PRODUCTION_SIGNALS = {
+    "production", "deployed", "launched", "shipped",
+    "scale", "million", "billion", "real users",
+    "latency", "a/b test", "recommender", "ranking system",
+    "live", "end-to-end", "end to end",
+}
+
 # ─── Education tiers ─────────────────────────────────────────────────────────
 
 EDU_TIER_SCORE = {"tier_1": 1.0, "tier_2": 0.75, "tier_3": 0.50,
@@ -131,6 +140,14 @@ def _all_consulting(candidate: dict) -> bool:
         for j in jobs
         if j.get("company", "").strip()
     )
+
+def _has_shipped_production(candidate: dict) -> bool:
+    """True if ≥1 job description contains 2+ production deployment signals."""
+    for job in candidate.get("career_history", []):
+        desc = job.get("description", "").lower()
+        if sum(1 for kw in PRODUCTION_SIGNALS if kw in desc) >= 2:
+            return True
+    return False
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -305,8 +322,12 @@ def score_experience(candidate: dict) -> float:
     """Weight: 0.25"""
     yoe = candidate["profile"].get("years_of_experience", 0)
 
-    if JD_EXP_MIN <= yoe <= JD_EXP_MAX:
-        range_score = 1.0
+    if 6.0 <= yoe <= 8.0:
+        range_score = 1.0                            # JD ideal window
+    elif JD_EXP_MIN <= yoe < 6.0:
+        range_score = 0.85                           # acceptable but below ideal
+    elif 8.0 < yoe <= JD_EXP_MAX:
+        range_score = 0.85                           # slightly overqualified
     elif yoe < JD_EXP_MIN:
         range_score = yoe / JD_EXP_MIN
     else:
@@ -333,17 +354,23 @@ def score_experience(candidate: dict) -> float:
     }
     # ──────────────────────────────────────────────────────────────────────
 
-    total_months, ai_months = 0, 0
+    total_months, ai_months, product_ai_months = 0, 0, 0
     for job in candidate.get("career_history", []):
         dur = job.get("duration_months", 0)
         title_words = set(job.get("title", "").lower().split())
         industry = job.get("industry", "").lower()
+        is_product_co = not _is_consulting_firm(job.get("company", ""))
         total_months += dur
         if title_words & AI_TITLE_TOKENS or "ai" in industry or "ml" in industry:
             ai_months += dur
+            if is_product_co:
+                product_ai_months += dur
 
-    depth_ratio = ai_months / max(total_months, 1)
-    depth_score = _norm(depth_ratio, 0, 0.6)
+    # 4yr product-AI out of 8yr total = 0.50 → full score (matches JD ideal)
+    product_depth_ratio = product_ai_months / max(total_months, 1)
+    total_depth_ratio   = ai_months / max(total_months, 1)
+    blended_depth       = 0.65 * product_depth_ratio + 0.35 * total_depth_ratio
+    depth_score         = _norm(blended_depth, 0, 0.50)
 
     has_product = any(
         j.get("company_size", "") not in ("1-10", "11-50")
@@ -354,8 +381,10 @@ def score_experience(candidate: dict) -> float:
     title_chaser_penalty = 0.15 if _is_title_chaser(candidate) else 0.0
     research_only_penalty = 0.25 if _is_pure_research(candidate) else 0.0
 
+    production_bonus = 0.08 if _has_shipped_production(candidate) else 0.0
     raw = range_score * 0.60 + depth_score * 0.40 \
-          - research_penalty - title_chaser_penalty - research_only_penalty
+          - research_penalty - title_chaser_penalty - research_only_penalty \
+          + production_bonus
     return float(np.clip(raw, 0.0, 1.0))
 
 
@@ -412,9 +441,13 @@ def score_location(candidate: dict) -> float:
     country  = candidate["profile"].get("country", "").lower()
     relocate = candidate["redrob_signals"].get("willing_to_relocate", False)
 
-    # Already in JD-preferred city
-    if any(loc in location for loc in JD_LOCATIONS):
+    # Noida/Pune — explicitly top-priority in JD
+    if any(loc in location for loc in JD_PREFERRED_CITIES):
         return 1.0
+
+    # Other JD-OK cities (Hyderabad, Mumbai, Delhi NCR, Bangalore, Gurgaon)
+    if any(loc in location for loc in JD_LOCATIONS):
+        return 0.85
 
     # Tier-1 city + willing to relocate (JD explicitly open to this)
     if any(city in location for city in INDIA_TIER1_CITIES) and relocate:
