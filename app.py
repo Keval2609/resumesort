@@ -26,7 +26,7 @@ st.caption("Team_Dev_108 | Senior AI Engineer — Founding Team")
 
 st.markdown("""
 **Pipeline:** BM25 pre-filter → Hard gates → Honeypot detection → Full scoring → Ranked CSV  
-**Formula:** `FinalScore = 0.70 × RelevanceScore + 0.30 × BehavioralScore`  
+**Formula:** `FinalScore = 0.75 × RelevanceScore + 0.25 × BehavioralScore`  
 > Sandbox accepts ≤100 candidates. Full 100K run happens locally.
 """)
 
