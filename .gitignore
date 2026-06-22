@@ -42,3 +42,5 @@ team_xxx.csv
 extract_sample.py
 extract_top100.py
 *.json
+graphify-out
+.pytest_cache
