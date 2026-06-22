@@ -1,6 +1,6 @@
 """
 Candidate scoring pipeline — pure Python + NumPy, no LLM/API calls.
-Formula: FinalScore = 0.70 × RelevanceScore + 0.30 × BehavioralScore
+Formula: FinalScore = 0.75 × RelevanceScore + 0.25 × BehavioralScore
 """
 
 import math
@@ -312,9 +312,33 @@ def score_skills(candidate: dict) -> float:
     # BUG 2 FIX: use _all_consulting() instead of _normalize_company()
     consulting_penalty = 0.20 if _all_consulting(candidate) else 0.0
 
-    raw = (must_score * 0.50 + prof_avg * 0.30 + nice_score * 0.20)
     cv_primary_penalty = 0.30 if _is_cv_speech_primary(candidate) else 0.0
-    raw = max(0.0, raw - neg_penalty - consulting_penalty - cv_primary_penalty)
+
+    # LangChain-primary without IR depth (JD explicit disqualifier)
+    langchain_present = "langchain" in skill_names
+    langchain_penalty = 0.20 if (langchain_present and len(must_hits) < 3) else 0.0
+
+    VECTOR_DB_SKILLS = {
+        "faiss", "pinecone", "weaviate", "qdrant", "milvus",
+        "opensearch", "elasticsearch"
+    }
+    EMBEDDING_SKILLS = {
+        "sentence transformers", "sentence-transformers",
+        "bge", "e5", "hugging face transformers", "embeddings"
+    }
+
+    vector_hits = skill_names & VECTOR_DB_SKILLS
+    embed_hits  = skill_names & EMBEDDING_SKILLS
+
+    ir_stack_bonus = 0.0
+    if len(vector_hits) >= 2 and embed_hits:
+        ir_stack_bonus = 0.12  # production IR stack confirmed
+    elif len(vector_hits) >= 1 and embed_hits:
+        ir_stack_bonus = 0.06
+
+    raw = (must_score * 0.50 + prof_avg * 0.30 + nice_score * 0.20)
+    raw += ir_stack_bonus
+    raw = max(0.0, raw - neg_penalty - consulting_penalty - cv_primary_penalty - langchain_penalty)
     return float(np.clip(raw, 0.0, 1.0))
 
 
@@ -392,12 +416,17 @@ def score_title_match(candidate: dict) -> float:
     """Weight: 0.15"""
     current_title = candidate["profile"].get("current_title", "").lower()
     headline      = candidate["profile"].get("headline", "").lower()
+    combined = current_title + " " + headline
 
+    RESEARCH_TITLES = {
+        "ai research engineer", "ml research engineer",
+        "research engineer", "research scientist",
+    }
     STRONG_TITLES = {
         "ml engineer", "machine learning engineer", "ai engineer",
         "nlp engineer", "applied scientist", "applied ml",
         "ranking engineer", "search engineer", "recommendation",
-        "data scientist", "research engineer",
+        "data scientist",
     }
     MEDIUM_TITLES = {
         "software engineer", "backend engineer", "data engineer",
@@ -410,7 +439,13 @@ def score_title_match(candidate: dict) -> float:
         "content writer", "sales executive",
     }
 
-    combined = current_title + " " + headline
+    for t in RESEARCH_TITLES:
+        if t in combined:
+            # Only reward if has >=3 must-have IR skills
+            skill_names = _skill_names(candidate)
+            ir_hits = len(skill_names & MUST_HAVE_SKILLS)
+            return 0.85 if ir_hits >= 3 else 0.40
+
     for t in STRONG_TITLES:
         if t in combined:
             return 1.0
@@ -655,7 +690,7 @@ def final_score(candidate: dict) -> dict:
     sq = score_skills_quality(candidate, sig)
     beh = rd * 0.30 + ri * 0.25 + pr * 0.20 + tr * 0.15 + sq * 0.10
 
-    final = float(np.clip(0.70 * rel + 0.30 * beh, 0.0, 1.0))
+    final = float(np.clip(0.75 * rel + 0.25 * beh, 0.0, 1.0))
 
     return {
         "candidate_id": cid,
