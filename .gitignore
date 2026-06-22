@@ -44,3 +44,6 @@ extract_top100.py
 *.json
 graphify-out
 .pytest_cache
+signals.txt
+jd.txt
+readme.txt
