@@ -194,7 +194,7 @@ def honeypot_score(candidate: dict) -> float:
     yoe_months = total_yoe * 12
     for skill in candidate.get("skills", []):
         dur = skill.get("duration_months", 0)
-        if dur > 0 and yoe_months > 0 and dur > yoe_months + 60:
+        if dur > 0 and yoe_months > 0 and dur > yoe_months + 48:
             score += 0.30
             break
 

@@ -55,7 +55,7 @@ def _check_active_before_signup(c):
 
 def _check_skill_duration_exceeds_yoe(c):
     yoe = c.get("profile", {}).get("years_of_experience", 0)
-    cap = yoe * 12 + 60   # allow 5yr buffer for self-taught
+    cap = yoe * 12 + 48   # allow 4yr buffer for self-taught
     violations = []
     for s in c.get("skills", []):
         dur = s.get("duration_months", 0)
