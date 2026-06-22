@@ -60,7 +60,7 @@ def _days_since(date_str: str) -> int:
         anchor = date(2026, 6, 13)
         return (anchor - d).days
     except Exception:
-        return 9999
+        return -1
 
 
 def _matched_required(candidate: dict) -> list[str]:
@@ -98,8 +98,8 @@ def _is_consulting_only(candidate: dict) -> bool:
 
 def _location_status(candidate: dict) -> tuple[bool, str]:
     profile = candidate.get("profile", {})
-    loc = profile.get("location", "").lower()
-    country = profile.get("country", "").lower()
+    loc = (profile.get("location") or "").lower()
+    country = (profile.get("country") or "").lower()
     relocate = candidate.get("redrob_signals", {}).get("willing_to_relocate", False)
     in_tier1 = any(city in loc for city in INDIA_TIER1_CITIES)
 
@@ -111,7 +111,7 @@ def _location_status(candidate: dict) -> tuple[bool, str]:
 
 
 def _salary_concern(candidate: dict) -> str | None:
-    sal = candidate.get("redrob_signals", {}).get("expected_salary_range_inr_lpa", {})
+    sal = (candidate.get("redrob_signals", {}).get("expected_salary_range_inr_lpa") or {})
     mn, mx = sal.get("min", 0), sal.get("max", 0)
     if mx > JD_MAX_SAL_LPA * 1.30:
         return f"salary band {mn:.0f}–{mx:.0f}L may exceed JD budget"
@@ -179,7 +179,9 @@ def _build_engagement_segment(eng: dict) -> str:
     # Availability
     if eng["open"]:
         parts.append("open-to-work flag set")
-    if eng["days_inactive"] < 14:
+    if eng["days_inactive"] == -1:
+        parts.append("activity date not available")
+    elif eng["days_inactive"] < 14:
         parts.append(f"active {eng['days_inactive']}d ago")
     elif eng["days_inactive"] < 60:
         parts.append(f"last active {eng['days_inactive']}d ago")

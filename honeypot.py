@@ -55,7 +55,7 @@ def _check_active_before_signup(c):
 
 def _check_skill_duration_exceeds_yoe(c):
     yoe = c.get("profile", {}).get("years_of_experience", 0)
-    cap = yoe * 12 + 18   # 18-month buffer
+    cap = yoe * 12 + 48   # allow 4yr buffer for self-taught
     violations = []
     for s in c.get("skills", []):
         dur = s.get("duration_months", 0)
@@ -63,8 +63,8 @@ def _check_skill_duration_exceeds_yoe(c):
             violations.append(f"{s['name']}({dur}mo)")
     if not violations:
         return 0.0, ""
-    weight = min(0.30 + 0.12 * len(violations), 0.75)
-    return weight, f"skill dur > YOE cap ({cap:.0f}mo): {', '.join(violations[:3])}"
+    weight = min(0.15 + 0.05 * len(violations), 0.25)
+    return weight, f"skill dur > cap ({cap:.0f}mo): {', '.join(violations[:3])}"
 
 
 def _check_career_duration_exceeds_yoe(c):
@@ -72,10 +72,26 @@ def _check_career_duration_exceeds_yoe(c):
     jobs = c.get("career_history", [])
     if not jobs:
         return 0.0, ""
-    total = sum(j.get("duration_months", 0) for j in jobs)
+
+    # Chronological span — handles moonlighters / concurrent roles
+    spans = []
+    for j in jobs:
+        start = _parse_date(j.get("start_date"))
+        if not start:
+            continue
+        end = _today() if j.get("is_current") else (_parse_date(j.get("end_date")) or _today())
+        spans.append((start, end))
+
+    if spans:
+        earliest = min(s[0] for s in spans)
+        latest   = max(s[1] for s in spans)
+        chron_months = (latest - earliest).days / 30.44
+    else:
+        chron_months = sum(j.get("duration_months", 0) for j in jobs)
+
     cap = yoe * 12 + 24
-    if total > cap * 1.5:
-        return 0.50, f"career total {total}mo >> YOE {yoe}yr (cap {cap}mo)"
+    if chron_months > cap * 1.5:
+        return 0.50, f"career span {chron_months:.0f}mo >> YOE {yoe}yr"
     return 0.0, ""
 
 
@@ -88,9 +104,9 @@ def _check_expert_on_junior(c):
         if s.get("proficiency") in ("expert", "advanced")
     )
     if expert_n >= 5 and yoe < 3:
-        return 0.55, f"{expert_n} advanced/expert skills on {yoe}yr profile"
+        return 0.15, f"{expert_n} advanced/expert skills on {yoe}yr profile"
     if expert_n >= 8 and yoe < 5:
-        return 0.45, f"{expert_n} advanced/expert skills on {yoe}yr profile"
+        return 0.12, f"{expert_n} advanced/expert skills on {yoe}yr profile"
     return 0.0, ""
 
 
@@ -140,7 +156,7 @@ def _check_expert_vs_low_assessment(c):
         and assessments[s["name"]] < 30
     ]
     if mismatches:
-        return 0.50, f"expert claim but low assessment: {mismatches}"
+        return 0.15, f"expert claim but low assessment: {mismatches}"
     return 0.0, ""
 
 

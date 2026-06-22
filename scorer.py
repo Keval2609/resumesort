@@ -1,6 +1,6 @@
 """
 Candidate scoring pipeline — pure Python + NumPy, no LLM/API calls.
-Formula: FinalScore = 0.70 × RelevanceScore + 0.30 × BehavioralScore
+Formula: FinalScore = 0.75 × RelevanceScore + 0.25 × BehavioralScore
 """
 
 import math
@@ -160,18 +160,41 @@ def honeypot_score(candidate: dict) -> float:
     score = 0.0
 
     total_yoe = candidate["profile"].get("years_of_experience", 0)
-    total_months = sum(
-        j.get("duration_months", 0)
-        for j in candidate.get("career_history", [])
-    )
+    jobs = candidate.get("career_history", [])
+    spans = []
+    for j in jobs:
+        start_str = j.get("start_date")
+        if not start_str:
+            continue
+        try:
+            start = datetime.strptime(start_str, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+            
+        if j.get("is_current"):
+            end = TODAY
+        else:
+            end_str = j.get("end_date")
+            try:
+                end = datetime.strptime(end_str, "%Y-%m-%d").date() if end_str else TODAY
+            except ValueError:
+                end = TODAY
+        spans.append((start, end))
 
-    if total_months > 0 and total_yoe > (total_months / 12) * 1.4:
+    if spans:
+        earliest = min(s[0] for s in spans)
+        latest   = max(s[1] for s in spans)
+        chron_months = (latest - earliest).days / 30.44
+    else:
+        chron_months = sum(j.get("duration_months", 0) for j in jobs)
+
+    if chron_months > 0 and total_yoe > (chron_months / 12) * 1.4:
         score += 0.35
 
     yoe_months = total_yoe * 12
     for skill in candidate.get("skills", []):
         dur = skill.get("duration_months", 0)
-        if dur > 0 and yoe_months > 0 and dur > yoe_months * 1.3:
+        if dur > 0 and yoe_months > 0 and dur > yoe_months + 48:
             score += 0.30
             break
 
@@ -223,14 +246,14 @@ def hard_gate_fail(candidate: dict) -> Optional[str]:
     if not sig.get("open_to_work_flag", False):
         return "not_open_to_work"
 
-    sal = sig.get("expected_salary_range_inr_lpa", {})
+    sal = (sig.get("expected_salary_range_inr_lpa") or {})
     sal_min = sal.get("min", 0)
     if sal_min > JD_SALARY_MAX_LPA * (1 + JD_SALARY_HARD_CAP_PCT):
         return "salary_too_high"
 
     pref = sig.get("preferred_work_mode", "flexible")
     if pref == "remote" and not sig.get("willing_to_relocate", False):
-        country = candidate["profile"].get("country", "India")
+        country = (candidate["profile"].get("country") or "India")
         if country.lower() == "india":
             return "work_mode_mismatch"
 
@@ -312,9 +335,33 @@ def score_skills(candidate: dict) -> float:
     # BUG 2 FIX: use _all_consulting() instead of _normalize_company()
     consulting_penalty = 0.20 if _all_consulting(candidate) else 0.0
 
-    raw = (must_score * 0.50 + prof_avg * 0.30 + nice_score * 0.20)
     cv_primary_penalty = 0.30 if _is_cv_speech_primary(candidate) else 0.0
-    raw = max(0.0, raw - neg_penalty - consulting_penalty - cv_primary_penalty)
+
+    # LangChain-primary without IR depth (JD explicit disqualifier)
+    langchain_present = "langchain" in skill_names
+    langchain_penalty = 0.20 if (langchain_present and len(must_hits) < 3) else 0.0
+
+    VECTOR_DB_SKILLS = {
+        "faiss", "pinecone", "weaviate", "qdrant", "milvus",
+        "opensearch", "elasticsearch"
+    }
+    EMBEDDING_SKILLS = {
+        "sentence transformers", "sentence-transformers",
+        "bge", "e5", "hugging face transformers", "embeddings"
+    }
+
+    vector_hits = skill_names & VECTOR_DB_SKILLS
+    embed_hits  = skill_names & EMBEDDING_SKILLS
+
+    ir_stack_bonus = 0.0
+    if len(vector_hits) >= 2 and embed_hits:
+        ir_stack_bonus = 0.12  # production IR stack confirmed
+    elif len(vector_hits) >= 1 and embed_hits:
+        ir_stack_bonus = 0.06
+
+    raw = (must_score * 0.50 + prof_avg * 0.30 + nice_score * 0.20)
+    raw += ir_stack_bonus
+    raw = max(0.0, raw - neg_penalty - consulting_penalty - cv_primary_penalty - langchain_penalty)
     return float(np.clip(raw, 0.0, 1.0))
 
 
@@ -392,12 +439,17 @@ def score_title_match(candidate: dict) -> float:
     """Weight: 0.15"""
     current_title = candidate["profile"].get("current_title", "").lower()
     headline      = candidate["profile"].get("headline", "").lower()
+    combined = current_title + " " + headline
 
+    RESEARCH_TITLES = {
+        "ai research engineer", "ml research engineer",
+        "research engineer", "research scientist",
+    }
     STRONG_TITLES = {
         "ml engineer", "machine learning engineer", "ai engineer",
         "nlp engineer", "applied scientist", "applied ml",
         "ranking engineer", "search engineer", "recommendation",
-        "data scientist", "research engineer",
+        "data scientist",
     }
     MEDIUM_TITLES = {
         "software engineer", "backend engineer", "data engineer",
@@ -410,7 +462,13 @@ def score_title_match(candidate: dict) -> float:
         "content writer", "sales executive",
     }
 
-    combined = current_title + " " + headline
+    for t in RESEARCH_TITLES:
+        if t in combined:
+            # Only reward if has >=3 must-have IR skills
+            skill_names = _skill_names(candidate)
+            ir_hits = len(skill_names & MUST_HAVE_SKILLS)
+            return 0.85 if ir_hits >= 3 else 0.40
+
     for t in STRONG_TITLES:
         if t in combined:
             return 1.0
@@ -437,8 +495,8 @@ def score_education(candidate: dict) -> float:
 
 def score_location(candidate: dict) -> float:
     """Weight: 0.05"""
-    location = candidate["profile"].get("location", "").lower()
-    country  = candidate["profile"].get("country", "").lower()
+    location = (candidate["profile"].get("location") or "").lower()
+    country  = (candidate["profile"].get("country") or "").lower()
     relocate = candidate["redrob_signals"].get("willing_to_relocate", False)
 
     # Noida/Pune — explicitly top-priority in JD
@@ -655,7 +713,7 @@ def final_score(candidate: dict) -> dict:
     sq = score_skills_quality(candidate, sig)
     beh = rd * 0.30 + ri * 0.25 + pr * 0.20 + tr * 0.15 + sq * 0.10
 
-    final = float(np.clip(0.70 * rel + 0.30 * beh, 0.0, 1.0))
+    final = float(np.clip(0.75 * rel + 0.25 * beh, 0.0, 1.0))
 
     return {
         "candidate_id": cid,
