@@ -160,18 +160,41 @@ def honeypot_score(candidate: dict) -> float:
     score = 0.0
 
     total_yoe = candidate["profile"].get("years_of_experience", 0)
-    total_months = sum(
-        j.get("duration_months", 0)
-        for j in candidate.get("career_history", [])
-    )
+    jobs = candidate.get("career_history", [])
+    spans = []
+    for j in jobs:
+        start_str = j.get("start_date")
+        if not start_str:
+            continue
+        try:
+            start = datetime.strptime(start_str, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+            
+        if j.get("is_current"):
+            end = TODAY
+        else:
+            end_str = j.get("end_date")
+            try:
+                end = datetime.strptime(end_str, "%Y-%m-%d").date() if end_str else TODAY
+            except ValueError:
+                end = TODAY
+        spans.append((start, end))
 
-    if total_months > 0 and total_yoe > (total_months / 12) * 1.4:
+    if spans:
+        earliest = min(s[0] for s in spans)
+        latest   = max(s[1] for s in spans)
+        chron_months = (latest - earliest).days / 30.44
+    else:
+        chron_months = sum(j.get("duration_months", 0) for j in jobs)
+
+    if chron_months > 0 and total_yoe > (chron_months / 12) * 1.4:
         score += 0.35
 
     yoe_months = total_yoe * 12
     for skill in candidate.get("skills", []):
         dur = skill.get("duration_months", 0)
-        if dur > 0 and yoe_months > 0 and dur > yoe_months * 1.3:
+        if dur > 0 and yoe_months > 0 and dur > yoe_months + 60:
             score += 0.30
             break
 
@@ -223,14 +246,14 @@ def hard_gate_fail(candidate: dict) -> Optional[str]:
     if not sig.get("open_to_work_flag", False):
         return "not_open_to_work"
 
-    sal = sig.get("expected_salary_range_inr_lpa", {})
+    sal = (sig.get("expected_salary_range_inr_lpa") or {})
     sal_min = sal.get("min", 0)
     if sal_min > JD_SALARY_MAX_LPA * (1 + JD_SALARY_HARD_CAP_PCT):
         return "salary_too_high"
 
     pref = sig.get("preferred_work_mode", "flexible")
     if pref == "remote" and not sig.get("willing_to_relocate", False):
-        country = candidate["profile"].get("country", "India")
+        country = (candidate["profile"].get("country") or "India")
         if country.lower() == "india":
             return "work_mode_mismatch"
 
@@ -472,8 +495,8 @@ def score_education(candidate: dict) -> float:
 
 def score_location(candidate: dict) -> float:
     """Weight: 0.05"""
-    location = candidate["profile"].get("location", "").lower()
-    country  = candidate["profile"].get("country", "").lower()
+    location = (candidate["profile"].get("location") or "").lower()
+    country  = (candidate["profile"].get("country") or "").lower()
     relocate = candidate["redrob_signals"].get("willing_to_relocate", False)
 
     # Noida/Pune — explicitly top-priority in JD
