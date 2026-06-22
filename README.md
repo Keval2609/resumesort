@@ -12,7 +12,7 @@ Deterministic, fully local candidate ranking pipeline for 100K profiles.
 No LLMs, no GPUs, no network calls during ranking.
 
 Pipeline: **BM25 pre-filter → Hard gates → Honeypot detection → Full scoring → Ranked CSV**  
-Formula: `FinalScore = 0.70 × RelevanceScore + 0.30 × BehavioralScore`
+Formula: `FinalScore = 0.75 × RelevanceScore + 0.25 × BehavioralScore`
 
 ---
 
@@ -104,20 +104,20 @@ Candidates are immediately excluded (score = 0.0) if they fail any gate:
 
 `scorer.py` runs an independent honeypot scorer (threshold = **0.65**). Flagged candidates are excluded before ranking. Detection signals include:
 
-- Skill `duration_months` > total YOE × 1.3  
-- Career total months >> declared YOE  
+- Skill `duration_months` > (total YOE in months + 48) (allows a 4-year buffer for self-taught developers)
+- Chronological career span >> declared YOE (handles concurrent roles without false positives)
 - Salary range inverted (min > max)  
 - Future `start_date` on current job  
 - `last_active_date` before `signup_date`  
-- ≥8 expert-level skills (combined signal)
+- Unrealistic junior expertise (e.g., ≥8 expert-level skills on a junior profile acts as a supporting signal)
 
 > `honeypot.py` standalone CLI uses a lower threshold of **0.40** for broader audit use. The ranking pipeline always uses 0.65 from `scorer.py`.
 
 ### Stage 4 — Scoring
 
-**Final Score = 0.70 × RelevanceScore + 0.30 × BehavioralScore**
+**Final Score = 0.75 × RelevanceScore + 0.25 × BehavioralScore**
 
-#### Relevance Score (70%)
+#### Relevance Score (75%)
 
 | Component | Weight | Key logic |
 |-----------|--------|-----------|
@@ -128,7 +128,7 @@ Candidates are immediately excluded (score = 0.0) if they fail any gate:
 | Location | 5% | JD cities (1.0) → Tier-1 + willing to relocate (0.75) → Tier-1 no relocation (0.50) → Non-Tier-1 India + relocate (0.25) → non-Tier-1 India (0.10) → Abroad + relocate (0.15) → Abroad no relocation (0.0) |
 | Certifications | 2% | AWS ML, Google Professional ML, TF Developer, Deep Learning Specialization, etc. |
 
-#### Behavioral Score (30%)
+#### Behavioral Score (25%)
 
 | Component | Weight | Key signals |
 |-----------|--------|-------------|
@@ -145,6 +145,7 @@ Candidates are immediately excluded (score = 0.0) if they fail any gate:
 - Cites specific YOE, title, company, named skills
 - Connects to JD requirements explicitly
 - Acknowledges real concerns (notice period, salary, location, inactivity)
+- Handled gracefully for null values (e.g., "activity date not available" for missing signals)
 - Tone matches rank (positive top-10, cautious bottom-15)
 - No templated endings — each row differs
 
@@ -162,7 +163,13 @@ Empirical: the full scorer runs ~5,000 candidates in ~90s. Going beyond risks th
 The previous `_normalize_company()` approach silently missed multi-word firms like "Tech Mahindra" (normalized to "tech_mahindra", not matched against "techmahindra"). Substring matching on raw lowercase fixes this correctly.
 
 **Why separate `honeypot.py` and inline `honeypot_score()` in `scorer.py`?**  
-`honeypot.py` is the full audit tool (11 detectors, probabilistic combination, CLI). The inline version in `scorer.py` is a faster subset tuned for the ranking pipeline's false-positive budget (~2% flag rate in top-5000).
+`honeypot.py` is the full audit tool (11 detectors, probabilistic combination, CLI). The inline version in `scorer.py` is a faster subset tuned for the ranking pipeline's false-positive budget (~2% flag rate in top-5000). Both strictly share logical constraints like chronological span and self-taught skill buffers.
+
+**Why use chronological span for career duration?**  
+Summing job durations penalizes candidates with concurrent roles (e.g., advisors, moonlighters). Calculating chronological span (`latest - earliest`) provides an accurate measure of total career time to prevent false positives in honeypot detection.
+
+**How do we handle self-taught candidates?**  
+The honeypot detector includes a +48-month buffer for skill duration vs. YOE to account for self-taught engineers who developed skills prior to their formal career start, preventing them from being incorrectly disqualified.
 
 ---
 
