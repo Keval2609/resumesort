@@ -89,6 +89,38 @@ PRODUCTION_SIGNALS = {
     "live", "end-to-end", "end to end",
 }
 
+# ── Retrieval-specific taxonomy (for elite bonus + assessment filtering) ──────
+
+RETRIEVAL_ELITE_SKILLS = {
+    "faiss", "pinecone", "weaviate", "qdrant", "milvus",
+    "opensearch", "elasticsearch", "information retrieval",
+    "vector search", "hybrid search",
+    "sentence transformers", "sentence-transformers", "bge", "e5",
+    "ranking", "learning to rank", "ndcg", "bm25", "retrieval",
+    "recommendation systems", "embeddings",
+}
+
+ASSESSMENT_POSITIVE = {
+    "vector search", "ranking", "information retrieval", "bm25",
+    "faiss", "pinecone", "weaviate", "qdrant", "milvus",
+    "learning to rank", "embeddings", "sentence transformers",
+    "elasticsearch", "opensearch", "hybrid search", "retrieval",
+    "nlp", "python", "recommendation systems", "recommendation",
+}
+
+ASSESSMENT_NEGATIVE_FOR_JD = {
+    "opencv", "object detection", "computer vision",
+    "speech recognition", "forecasting", "image classification",
+    "yolo", "pose estimation", "ocr",
+}
+
+RETRIEVAL_DOMAIN_SIGNALS = {
+    "ranking", "retrieval", "recommendation", "search",
+    "vector", "embedding", "semantic search",
+    "hybrid search", "bm25", "faiss", "pinecone",
+    "qdrant", "weaviate", "ndcg", "mrr", "relevance",
+}
+
 # ─── Education tiers ─────────────────────────────────────────────────────────
 
 EDU_TIER_SCORE = {"tier_1": 1.0, "tier_2": 0.75, "tier_3": 0.50,
@@ -146,6 +178,16 @@ def _has_shipped_production(candidate: dict) -> bool:
     for job in candidate.get("career_history", []):
         desc = job.get("description", "").lower()
         if sum(1 for kw in PRODUCTION_SIGNALS if kw in desc) >= 2:
+            return True
+    return False
+
+def _has_shipped_retrieval(candidate: dict) -> bool:
+    """True if ≥1 job has both retrieval-domain AND production signals."""
+    for job in candidate.get("career_history", []):
+        desc = job.get("description", "").lower()
+        retrieval_kws = sum(1 for kw in RETRIEVAL_DOMAIN_SIGNALS if kw in desc)
+        prod_kws = sum(1 for kw in PRODUCTION_SIGNALS if kw in desc)
+        if retrieval_kws >= 2 and prod_kws >= 1:
             return True
     return False
 
@@ -362,6 +404,17 @@ def score_skills(candidate: dict) -> float:
     raw = (must_score * 0.50 + prof_avg * 0.30 + nice_score * 0.20)
     raw += ir_stack_bonus
     raw = max(0.0, raw - neg_penalty - consulting_penalty - cv_primary_penalty - langchain_penalty)
+
+    # Nonlinear elite boost: expert IR skills rise superlinearly
+    # 2 hits→+0.04, 4 hits→+0.11, 6 hits→+0.17, 8+ hits→+0.20 (capped)
+    ir_expert_hits = sum(
+        1 for name, s in skill_map.items()
+        if name in RETRIEVAL_ELITE_SKILLS
+        and s.get("proficiency") in ("advanced", "expert")
+    )
+    elite_bonus = min(0.20, 0.015 * (ir_expert_hits ** 1.5))
+    raw = min(1.0, raw + elite_bonus)
+
     return float(np.clip(raw, 0.0, 1.0))
 
 
@@ -378,7 +431,9 @@ def score_experience(candidate: dict) -> float:
     elif yoe < JD_EXP_MIN:
         range_score = yoe / JD_EXP_MIN
     else:
-        range_score = max(0.6, 1.0 - (yoe - JD_EXP_MAX) * 0.04)
+        # Bell-curve penalty: 10yr→0.79, 12yr→0.68, 15yr→0.50, 18yr→0.33
+        excess = yoe - JD_EXP_MAX
+        range_score = max(0.25, 0.85 - excess * 0.058)
 
     # ── BUG 1 FIX ─────────────────────────────────────────────────────────
     # REMOVED: "engineer", "research", "applied", "search"
@@ -428,7 +483,12 @@ def score_experience(candidate: dict) -> float:
     title_chaser_penalty = 0.15 if _is_title_chaser(candidate) else 0.0
     research_only_penalty = 0.25 if _is_pure_research(candidate) else 0.0
 
-    production_bonus = 0.08 if _has_shipped_production(candidate) else 0.0
+    if _has_shipped_retrieval(candidate):
+        production_bonus = 0.12      # retrieval-specific shipping
+    elif _has_shipped_production(candidate):
+        production_bonus = 0.05      # generic production; smaller reward
+    else:
+        production_bonus = 0.0
     raw = range_score * 0.60 + depth_score * 0.40 \
           - research_penalty - title_chaser_penalty - research_only_penalty \
           + production_bonus
@@ -436,48 +496,47 @@ def score_experience(candidate: dict) -> float:
 
 
 def score_title_match(candidate: dict) -> float:
-    """Weight: 0.15"""
+    """Weight: 0.15 — 4-tier system; retrieval-specific titles dominate."""
     current_title = candidate["profile"].get("current_title", "").lower()
     headline      = candidate["profile"].get("headline", "").lower()
     combined = current_title + " " + headline
 
-    RESEARCH_TITLES = {
-        "ai research engineer", "ml research engineer",
-        "research engineer", "research scientist",
+    # Tier 1 (1.00): IR/ranking/search/recommendation specific
+    TIER1 = {
+        "search engineer", "retrieval engineer", "ranking engineer",
+        "recommendation systems engineer", "recommendation engineer",
     }
-    STRONG_TITLES = {
-        "ml engineer", "machine learning engineer", "ai engineer",
-        "nlp engineer", "applied scientist", "applied ml",
-        "ranking engineer", "search engineer", "recommendation",
-        "data scientist",
+    # Tier 2 (0.90): Deep ML/NLP with applied signal
+    TIER2 = {
+        "ml engineer", "machine learning engineer", "nlp engineer",
+        "applied scientist", "applied ml",
     }
-    MEDIUM_TITLES = {
+    # Tier 3 (0.75): Solid ML but generic label
+    TIER3 = {
+        "ai engineer", "data scientist", "research engineer",
+    }
+    # Tier 4 (0.55): Adjacent engineering
+    TIER4 = {
         "software engineer", "backend engineer", "data engineer",
         "cloud engineer", "platform engineer", "full stack",
     }
-    WEAK_TITLES = {
+    WEAK = {
         "marketing manager", "operations manager", "project manager",
         "business analyst", "accountant", "hr manager", "customer support",
         "civil engineer", "mechanical engineer", "graphic designer",
         "content writer", "sales executive",
     }
 
-    for t in RESEARCH_TITLES:
-        if t in combined:
-            # Only reward if has >=3 must-have IR skills
-            skill_names = _skill_names(candidate)
-            ir_hits = len(skill_names & MUST_HAVE_SKILLS)
-            return 0.85 if ir_hits >= 3 else 0.40
-
-    for t in STRONG_TITLES:
-        if t in combined:
-            return 1.0
-    for t in MEDIUM_TITLES:
-        if t in combined:
-            return 0.55
-    for t in WEAK_TITLES:
-        if t in combined:
-            return 0.05
+    for t in TIER1: 
+        if t in combined: return 1.00
+    for t in TIER2: 
+        if t in combined: return 0.90
+    for t in TIER3: 
+        if t in combined: return 0.75
+    for t in TIER4: 
+        if t in combined: return 0.55
+    for t in WEAK:  
+        if t in combined: return 0.05
     return 0.30
 
 
@@ -638,14 +697,23 @@ def score_skills_quality(candidate: dict, sig: dict) -> float:
     endorsements = sig.get("endorsements_received", 0)
 
     if assessment:
-        relevant_scores = []
+        weighted_scores = []
+        neg_penalty = 0.0
         for skill_name, score in assessment.items():
-            if skill_name.lower() in MUST_HAVE_SKILLS | GOOD_TO_HAVE_SKILLS:
-                relevant_scores.append(score / 100.0)
-        if relevant_scores:
-            assessment_score = float(np.mean(relevant_scores))
+            name_lower = skill_name.lower()
+            norm = score / 100.0
+            if name_lower in ASSESSMENT_POSITIVE:
+                weighted_scores.append(norm * 1.30)     # JD-relevant: upweight
+            elif name_lower in ASSESSMENT_NEGATIVE_FOR_JD:
+                neg_penalty += 0.04                     # CV/speech: penalise
+            else:
+                weighted_scores.append(norm * 0.75)     # neutral: discount
+        if weighted_scores:
+            assessment_score = float(np.clip(
+                np.mean(weighted_scores) - neg_penalty, 0.0, 1.0
+            ))
         else:
-            assessment_score = float(np.mean(list(assessment.values()))) / 100.0
+            assessment_score = max(0.0, 0.30 - neg_penalty)
     else:
         assessment_score = 0.4
 
