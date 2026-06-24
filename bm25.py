@@ -1,8 +1,3 @@
-"""
-Inverted Index + BM25 implementation for candidate ranking.
-CPU-only, no external APIs, fits 100K candidates in <16GB RAM.
-"""
-
 import math
 import json
 import re
@@ -86,10 +81,7 @@ class BM25:
         top_k: int = 200,
         candidate_ids: Optional[set] = None
     ) -> list[tuple[str, float]]:
-        """
-        Efficient retrieval: only score docs containing at least one query term.
-        Returns list of (doc_id, score) sorted descending.
-        """
+        
         candidate_docs: set[str] = set()
         for term in set(query_tokens):
             posting = self.index.index.get(term, {})

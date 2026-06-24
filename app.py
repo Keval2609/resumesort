@@ -1,8 +1,3 @@
-"""
-app.py — Redrob Hackathon Sandbox (Team_Dev_108)
-Streamlit interface for candidate ranking pipeline.
-Runs end-to-end: upload candidates → rank → download CSV.
-"""
 
 import csv
 import io
@@ -22,7 +17,7 @@ st.set_page_config(
 )
 
 st.title("🤖 Redrob Candidate Ranker")
-st.caption("Team_Dev_108 | Senior AI Engineer — Founding Team")
+st.caption("SignalOverNoise-108 | Senior AI Engineer — Founding Team")
 
 st.markdown("""
 **Pipeline:** BM25 pre-filter → Hard gates → Honeypot detection → Full scoring → Ranked CSV  

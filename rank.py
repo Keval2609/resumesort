@@ -1,18 +1,4 @@
 #!/usr/bin/env python3
-"""
-rank.py — single entry point for Redrob Hackathon submission.
-
-Usage:
-    python rank.py --candidates ./data/candidates.jsonl.gz \
-                   --out ./team_xxx.csv
-
-Constraints (per submission_spec.md Section 3):
-    - Runtime  ≤ 5 min wall-clock
-    - RAM      ≤ 16 GB
-    - CPU only, no GPU
-    - No network / external API calls
-    - Output   exactly 100 rows + header, UTF-8 CSV
-"""
 
 import argparse
 import csv
@@ -73,11 +59,7 @@ def load_candidates(path: Path) -> list[dict]:
 
 
 def enforce_monotone(results: list[dict]) -> list[dict]:
-    """
-    Guarantee score[rank i] >= score[rank i+1].
-    Spec: non-increasing scores required; ties broken by candidate_id asc.
-    If a score inversion exists after sorting, clamp it down.
-    """
+
     if not results:
         return results
 

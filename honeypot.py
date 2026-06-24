@@ -1,17 +1,4 @@
 #!/usr/bin/env python3
-"""
-honeypot.py — Detect impossible/synthetic candidate profiles.
-
-The dataset contains ~80 honeypot candidates with subtly impossible profiles.
-Submissions with honeypot rate > 10% in top 100 are DISQUALIFIED at Stage 3.
-
-Detection strategy: accumulate weighted red flags -> score 0..1.
-Any candidate with honeypot_score >= HONEYPOT_THRESHOLD is flagged.
-Flagged candidates are forced to relevance tier 0 (score = 0.0) before ranking.
-
-Usage:
-    from honeypot import score_honeypot, is_honeypot, filter_honeypots
-"""
 
 from __future__ import annotations
 from datetime import date, datetime
