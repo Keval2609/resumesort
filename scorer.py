@@ -1,7 +1,3 @@
-"""
-Candidate scoring pipeline — pure Python + NumPy, no LLM/API calls.
-Formula: FinalScore = 0.75 × RelevanceScore + 0.25 × BehavioralScore
-"""
 
 import math
 import re
@@ -155,7 +151,7 @@ def _skill_map(candidate: dict) -> dict[str, dict]:
     return {s["name"].lower(): s for s in candidate.get("skills", [])}
 
 
-# ─── BUG 2 FIX: consulting detection ─────────────────────────────────────────
+# ─── Consulting Detection ─────────────────────────────────────────
 
 def _is_consulting_firm(company_name: str) -> bool:
     """True if company_name contains any known consulting firm name."""
@@ -405,8 +401,6 @@ def score_skills(candidate: dict) -> float:
     raw += ir_stack_bonus
     raw = max(0.0, raw - neg_penalty - consulting_penalty - cv_primary_penalty - langchain_penalty)
 
-    # Nonlinear elite boost: expert IR skills rise superlinearly
-    # 2 hits→+0.04, 4 hits→+0.11, 6 hits→+0.17, 8+ hits→+0.20 (capped)
     ir_expert_hits = sum(
         1 for name, s in skill_map.items()
         if name in RETRIEVAL_ELITE_SKILLS
@@ -435,13 +429,7 @@ def score_experience(candidate: dict) -> float:
         excess = yoe - JD_EXP_MAX
         range_score = max(0.25, 0.85 - excess * 0.058)
 
-    # ── BUG 1 FIX ─────────────────────────────────────────────────────────
-    # REMOVED: "engineer", "research", "applied", "search"
-    # "engineer" alone matched Mechanical/Civil/Chemical Engineer titles
-    # "research" matched Research Analyst, Research Associate, etc.
-    # "applied" matched Applied Mathematics, Applied Sciences, etc.
-    # "search" matched SEO, Web Search roles
-    # KEPT: specific ML/AI tokens only
+   
     AI_TITLE_TOKENS = {
         "ml",               # ML Engineer
         "ai",               # AI Engineer, AI Researcher
