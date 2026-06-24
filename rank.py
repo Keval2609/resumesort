@@ -221,12 +221,11 @@ def run_pipeline(candidates: list[dict]) -> list[dict]:
     gated     = sum(1 for r in scored if r["gate"] == "not_open_to_work")
     honeypots = sum(1 for r in scored if r["gate"] == "honeypot")
     work_mode = sum(1 for r in scored if r["gate"] == "work_mode_mismatch")
-    salary    = sum(1 for r in scored if r["gate"] == "salary_too_high")
     active    = sum(1 for r in scored if r["gate"] is None)
 
     log.info(
         f"Gate stats — active: {active}  |  not_open_to_work: {gated}  |  "
-        f"honeypots: {honeypots}  |  work_mode: {work_mode}  |  salary: {salary}"
+        f"honeypots: {honeypots}  |  work_mode: {work_mode}"
     )
 
     if active < TOP_K:

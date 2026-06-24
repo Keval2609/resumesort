@@ -1,19 +1,4 @@
 #!/usr/bin/env python3
-"""
-reasoning.py — Stage 4-compliant reasoning column generator.
-
-Stage 4 checks (10 random rows sampled):
-  1. Specific facts    — must cite YOE, title, company, named skills, signal values
-  2. JD connection     — connect to what the JD actually asks for
-  3. Honest concerns   — acknowledge real gaps (notice, location, salary, exp level)
-  4. No hallucination  — every claim must exist in the profile
-  5. Variation         — no templated strings; each row must differ
-  6. Rank consistency  — top ranks sound positive; bottom ranks sound cautious
-
-Usage:
-    from reasoning import generate_reasoning
-    text = generate_reasoning(rank=1, candidate=c, score=0.91)
-"""
 
 from __future__ import annotations
 
@@ -49,7 +34,7 @@ INDIA_TIER1_CITIES = {
 }
 JD_NOTICE_SOFT = 30
 JD_NOTICE_HARD = 90
-JD_MAX_SAL_LPA = 60.0
+
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -108,15 +93,6 @@ def _location_status(candidate: dict) -> tuple[bool, str]:
     if country != "india":
         return relocate, f"{profile.get('location')} (abroad; relocate={relocate})"
     return relocate, f"{profile.get('location')} (non-metro; relocate={relocate})"
-
-
-def _salary_concern(candidate: dict) -> str | None:
-    sal = (candidate.get("redrob_signals", {}).get("expected_salary_range_inr_lpa") or {})
-    mn, mx = sal.get("min", 0), sal.get("max", 0)
-    if mx > JD_MAX_SAL_LPA * 1.30:
-        return f"salary band {mn:.0f}–{mx:.0f}L may exceed JD budget"
-    return None
-
 
 def _engagement_facts(candidate: dict) -> dict:
     sig = candidate.get("redrob_signals", {})
@@ -255,10 +231,6 @@ def _build_concern_segment(
     if not loc_ok:
         concerns.append(f"location: {loc_label}")
 
-    sal_issue = _salary_concern(candidate)
-    if sal_issue:
-        concerns.append(sal_issue)
-
     if eng["days_inactive"] > 90:
         concerns.append(f"profile inactive {eng['days_inactive']}d")
 
@@ -274,16 +246,7 @@ def _build_concern_segment(
 # ── Main public function ──────────────────────────────────────────────────────
 
 def generate_reasoning(rank: int, candidate: dict, score: float) -> str:
-    """
-    Generate a Stage 4-compliant reasoning string.
 
-    Guarantees:
-    - Cites specific facts from this candidate (no hallucination)
-    - Connects to the JD explicitly
-    - Acknowledges genuine concerns
-    - Tone matches rank (positive top, cautious bottom)
-    - Max ~420 chars for CSV readability
-    """
     required = _matched_required(candidate)
     nice = _matched_nice(candidate)
     eng = _engagement_facts(candidate)

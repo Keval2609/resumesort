@@ -9,8 +9,6 @@ TODAY = date(2026, 6, 13)
 
 # ─── JD Constants ─────────────────────────────────────────────────────────────
 
-JD_SALARY_MAX_LPA      = 80.0
-JD_SALARY_HARD_CAP_PCT = 0.30
 JD_EXP_MIN             = 5.0
 JD_EXP_MAX             = 9.0
 JD_NOTICE_SOFT_DAYS    = 30
@@ -21,7 +19,7 @@ JD_LOCATIONS = {
     "gurgaon", "bengaluru", "bangalore"
 }
 
-JD_PREFERRED_CITIES = {"noida", "pune"}   # JD says these are top-priority
+JD_PREFERRED_CITIES = {"noida", "pune"}
 
 INDIA_TIER1_CITIES = {
     "noida", "pune", "hyderabad", "mumbai", "delhi", "delhi ncr",
@@ -284,11 +282,6 @@ def hard_gate_fail(candidate: dict) -> Optional[str]:
     if not sig.get("open_to_work_flag", False):
         return "not_open_to_work"
 
-    sal = (sig.get("expected_salary_range_inr_lpa") or {})
-    sal_min = sal.get("min", 0)
-    if sal_min > JD_SALARY_MAX_LPA * (1 + JD_SALARY_HARD_CAP_PCT):
-        return "salary_too_high"
-
     pref = sig.get("preferred_work_mode", "flexible")
     if pref == "remote" and not sig.get("willing_to_relocate", False):
         country = (candidate["profile"].get("country") or "India")
@@ -427,8 +420,7 @@ def score_experience(candidate: dict) -> float:
     else:
         # Bell-curve penalty: 10yr→0.79, 12yr→0.68, 15yr→0.50, 18yr→0.33
         excess = yoe - JD_EXP_MAX
-        range_score = max(0.25, 0.85 - excess * 0.058)
-
+        range_score = max(0.25, 0.85 - excess * 0.075)
    
     AI_TITLE_TOKENS = {
         "ml",               # ML Engineer
