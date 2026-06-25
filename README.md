@@ -104,7 +104,8 @@ Candidates are immediately excluded (score = 0.0) if they fail any gate:
 `scorer.py` runs an independent honeypot scorer (threshold = **0.65**). Flagged candidates are excluded before ranking. Detection signals include:
 
 - Skill `duration_months` > (total YOE in months + 48) (allows a 4-year buffer for self-taught developers)
-- Chronological career span >> declared YOE (handles concurrent roles without false positives)  
+- Declared YOE >> chronological career span , e.g., YOE > 1.4× actual span (handles concurrent roles without false positives)
+
 - Future `start_date` on current job  
 - `last_active_date` before `signup_date`  
 - Unrealistic junior expertise (e.g., ≥8 expert-level skills on a junior profile acts as a supporting signal)
@@ -119,7 +120,7 @@ Candidates are immediately excluded (score = 0.0) if they fail any gate:
 
 | Component | Weight | Key logic |
 |-----------|--------|-----------|
-| Skills | 45% | Must-have (sentence-transformers, FAISS, Qdrant, NDCG, Python, etc.) + good-to-have; Elite bonus for advanced IR/Ranking skills; penalties for CV/speech-primary, all-consulting career, irrelevant skills |
+| Skills | 45% | Must-have (sentence-transformers, FAISS, Qdrant, NDCG, Python, etc.) + good-to-have; Elite bonus for advanced IR/Ranking skills; penalties for CV/speech-primary, LangChain-primary without IR depth, all-consulting career, irrelevant skills |
 | Experience | 25% | JD range 5–9 yr (with linear decay penalty for >9 yr); depth ratio (AI/ML months ÷ total months); retrieval-specific shipping bonus; penalties for title-chasers (3+ stints <18mo), pure-research career (>70%), no product company |
 | Title match | 15% | Tier 1 (1.0): IR/Ranking/Search/Recommendation. Tier 2 (0.90): ML/NLP/Applied Scientist. Tier 3 (0.75): AI/Data Scientist. Tier 4: SWE/Backend/Data Engineer. Weak: Marketing/Civil/etc. |
 | Education | 8% | Institution tier × field relevance (CS, ML, AI, Stats, NLP) |
