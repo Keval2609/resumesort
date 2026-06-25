@@ -97,7 +97,6 @@ Candidates are immediately excluded (score = 0.0) if they fail any gate:
 | Gate | Condition | Effect |
 |------|-----------|--------|
 | Not open to work | `open_to_work_flag = False` | Score = 0.0 (excluded) |
-| Salary too high | `salary_min > JD_max × 1.30` | Score = 0.0 (excluded) |
 | Work mode mismatch | `preferred_work_mode = remote` AND `willing_to_relocate = False` AND `country = India` | Score = 0.0 (excluded) |
 
 ### Stage 3 — Honeypot Detection
@@ -105,8 +104,7 @@ Candidates are immediately excluded (score = 0.0) if they fail any gate:
 `scorer.py` runs an independent honeypot scorer (threshold = **0.65**). Flagged candidates are excluded before ranking. Detection signals include:
 
 - Skill `duration_months` > (total YOE in months + 48) (allows a 4-year buffer for self-taught developers)
-- Chronological career span >> declared YOE (handles concurrent roles without false positives)
-- Salary range inverted (min > max)  
+- Chronological career span >> declared YOE (handles concurrent roles without false positives)  
 - Future `start_date` on current job  
 - `last_active_date` before `signup_date`  
 - Unrealistic junior expertise (e.g., ≥8 expert-level skills on a junior profile acts as a supporting signal)
@@ -121,9 +119,9 @@ Candidates are immediately excluded (score = 0.0) if they fail any gate:
 
 | Component | Weight | Key logic |
 |-----------|--------|-----------|
-| Skills | 45% | Must-have (sentence-transformers, FAISS, Qdrant, NDCG, Python, etc.) + good-to-have; penalties for CV/speech-primary, all-consulting career, irrelevant skills |
-| Experience | 25% | JD range 5–9 yr; depth ratio (AI/ML months ÷ total months); penalties for title-chasers (3+ stints <18mo), pure-research career (>70%), no product company |
-| Title match | 15% | Strong: ML/AI/NLP/Ranking engineer, Applied Scientist. Medium: SWE, Backend, Data Engineer. Weak: Marketing, Civil, Mechanical, etc. |
+| Skills | 45% | Must-have (sentence-transformers, FAISS, Qdrant, NDCG, Python, etc.) + good-to-have; Elite bonus for advanced IR/Ranking skills; penalties for CV/speech-primary, all-consulting career, irrelevant skills |
+| Experience | 25% | JD range 5–9 yr (with linear decay penalty for >9 yr); depth ratio (AI/ML months ÷ total months); retrieval-specific shipping bonus; penalties for title-chasers (3+ stints <18mo), pure-research career (>70%), no product company |
+| Title match | 15% | Tier 1 (1.0): IR/Ranking/Search/Recommendation. Tier 2 (0.90): ML/NLP/Applied Scientist. Tier 3 (0.75): AI/Data Scientist. Tier 4: SWE/Backend/Data Engineer. Weak: Marketing/Civil/etc. |
 | Education | 8% | Institution tier × field relevance (CS, ML, AI, Stats, NLP) |
 | Location | 5% | JD cities (1.0) → Tier-1 + willing to relocate (0.75) → Tier-1 no relocation (0.50) → Non-Tier-1 India + relocate (0.25) → non-Tier-1 India (0.10) → Abroad + relocate (0.15) → Abroad no relocation (0.0) |
 | Certifications | 2% | AWS ML, Google Professional ML, TF Developer, Deep Learning Specialization, etc. |
@@ -144,7 +142,7 @@ Candidates are immediately excluded (score = 0.0) if they fail any gate:
 
 - Cites specific YOE, title, company, named skills
 - Connects to JD requirements explicitly
-- Acknowledges real concerns (notice period, salary, location, inactivity)
+- Acknowledges real concerns (notice period, location, inactivity)
 - Handled gracefully for null values (e.g., "activity date not available" for missing signals)
 - Tone matches rank (positive top-10, cautious bottom-15)
 - No templated endings — each row differs
