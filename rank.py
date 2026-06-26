@@ -87,7 +87,7 @@ def write_csv(results: list[dict],
         for rank, r in enumerate(results, start=1):
             cid = r["candidate_id"]
             candidate = candidates_by_id[cid]
-            reasoning = generate_reasoning(rank, candidate, r['final'])
+            reasoning = generate_reasoning(rank, candidate, r['final'], scores=r)
 
             writer.writerow([
                 cid,

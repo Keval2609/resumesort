@@ -5,7 +5,16 @@ import numpy as np
 from datetime import date, datetime
 from typing import Optional
 
+from honeypot import score_honeypot as _score_honeypot
+
 TODAY = date(2026, 6, 13)
+
+HONEYPOT_PIPELINE_THRESHOLD = 0.65   # tighter than audit tool's 0.40
+
+
+def is_honeypot(candidate: dict) -> bool:
+    score, _ = _score_honeypot(candidate)
+    return score >= HONEYPOT_PIPELINE_THRESHOLD
 
 # ─── JD Constants ─────────────────────────────────────────────────────────────
 
@@ -37,16 +46,16 @@ MUST_HAVE_SKILLS = {
     "opensearch", "elasticsearch", "bm25", "hybrid search",
     "information retrieval", "vector search",
     "ndcg", "mrr", "map", "ranking evaluation",
-    "python",
+    "python", "a/b testing",
     "ranking", "recommendation systems", "search", "retrieval",
-    "learning to rank", "xgboost", "lightgbm",
+    "learning to rank", 
 }
 
 GOOD_TO_HAVE_SKILLS = {
     "fine-tuning llms", "fine-tuning", "lora", "qlora", "peft",
     "pytorch", "tensorflow", "mlops", "mlflow", "feature engineering",
-    "scikit-learn", "a/b testing", "distributed systems",
-    "large scale inference", "nlp", "transformers",
+    "scikit-learn", "distributed systems",
+    "large scale inference", "nlp", "transformers", "xgboost", "lightgbm"
 }
 
 NEGATIVE_SKILLS = {
@@ -187,92 +196,6 @@ def _has_shipped_retrieval(candidate: dict) -> bool:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# HONEYPOT DETECTION
-# ═══════════════════════════════════════════════════════════════════════════════
-
-HONEYPOT_THRESHOLD = 0.65
-
-def honeypot_score(candidate: dict) -> float:
-    score = 0.0
-
-    total_yoe = candidate["profile"].get("years_of_experience", 0)
-    jobs = candidate.get("career_history", [])
-    spans = []
-    for j in jobs:
-        start_str = j.get("start_date")
-        if not start_str:
-            continue
-        try:
-            start = datetime.strptime(start_str, "%Y-%m-%d").date()
-        except ValueError:
-            continue
-            
-        if j.get("is_current"):
-            end = TODAY
-        else:
-            end_str = j.get("end_date")
-            try:
-                end = datetime.strptime(end_str, "%Y-%m-%d").date() if end_str else TODAY
-            except ValueError:
-                end = TODAY
-        spans.append((start, end))
-
-    if spans:
-        earliest = min(s[0] for s in spans)
-        latest   = max(s[1] for s in spans)
-        chron_months = (latest - earliest).days / 30.44
-    else:
-        chron_months = sum(j.get("duration_months", 0) for j in jobs)
-
-    if chron_months > 0 and total_yoe > (chron_months / 12) * 1.4:
-        score += 0.35
-
-    yoe_months = total_yoe * 12
-    for skill in candidate.get("skills", []):
-        dur = skill.get("duration_months", 0)
-        if dur > 0 and yoe_months > 0 and dur > yoe_months + 48:
-            score += 0.30
-            break
-
-    expert_count = sum(
-        1 for s in candidate.get("skills", [])
-        if s.get("proficiency") == "expert"
-    )
-    if expert_count >= 8:
-        score += 0.30
-
-    sal = candidate["redrob_signals"].get("expected_salary_range_inr_lpa", {})
-    sal_min = sal.get("min", 0)
-    sal_max = sal.get("max", 0)
-    if sal_min > 0 and sal_max > 0 and sal_min > sal_max * 1.5:
-        score += 0.50
-
-    for job in candidate.get("career_history", []):
-        if job.get("is_current"):
-            try:
-                start = datetime.strptime(job["start_date"], "%Y-%m-%d").date()
-                if start > TODAY:
-                    score += 0.40
-            except Exception:
-                pass
-
-    signup_days = _days_since(
-        candidate["redrob_signals"].get("signup_date", "2000-01-01")
-    )
-    active_days = _days_since(
-        candidate["redrob_signals"].get("last_active_date", "2000-01-01")
-    )
-    if signup_days < active_days:
-        score += 0.35
-
-    return min(score, 1.0)
-
-
-def is_honeypot(candidate: dict) -> bool:
-    return honeypot_score(candidate) >= HONEYPOT_THRESHOLD
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # HARD GATES
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -407,7 +330,13 @@ def score_skills(candidate: dict) -> float:
 
 def score_experience(candidate: dict) -> float:
     """Weight: 0.25"""
-    yoe = candidate["profile"].get("years_of_experience", 0)
+    profile_yoe = candidate["profile"].get("years_of_experience", 0)
+    
+    career_months = sum(
+        j.get("duration_months", 0)
+        for j in candidate.get("career_history", [])
+    )
+    yoe = max(profile_yoe, career_months / 12.0)
 
     if 6.0 <= yoe <= 8.0:
         range_score = 1.0                            # JD ideal window
@@ -418,7 +347,6 @@ def score_experience(candidate: dict) -> float:
     elif yoe < JD_EXP_MIN:
         range_score = yoe / JD_EXP_MIN
     else:
-        # Bell-curve penalty: 10yr→0.79, 12yr→0.68, 15yr→0.50, 18yr→0.33
         excess = yoe - JD_EXP_MAX
         range_score = max(0.25, 0.85 - excess * 0.075)
    
@@ -762,6 +690,15 @@ def final_score(candidate: dict) -> dict:
     beh = rd * 0.30 + ri * 0.25 + pr * 0.20 + tr * 0.15 + sq * 0.10
 
     final = float(np.clip(0.75 * rel + 0.25 * beh, 0.0, 1.0))
+
+    # Location multiplier: outside JD cities + won't relocate
+    location = (candidate["profile"].get("location") or "").lower()
+    country   = (candidate["profile"].get("country") or "").lower()
+    relocate  = candidate["redrob_signals"].get("willing_to_relocate", False)
+    in_jd_city = any(c in location for c in JD_LOCATIONS | JD_PREFERRED_CITIES)
+
+    if not in_jd_city and not relocate and country == "india":
+        final *= 0.80
 
     return {
         "candidate_id": cid,

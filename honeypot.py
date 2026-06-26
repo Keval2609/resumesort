@@ -42,7 +42,9 @@ def _check_active_before_signup(c):
 
 def _check_skill_duration_exceeds_yoe(c):
     yoe = c.get("profile", {}).get("years_of_experience", 0)
-    cap = yoe * 12 + 48   # allow 4yr buffer for self-taught
+    career_months = sum(j.get("duration_months", 0) for j in c.get("career_history", []))
+    effective_yoe = max(yoe, career_months / 12.0)
+    cap = effective_yoe * 12 + 48
     violations = []
     for s in c.get("skills", []):
         dur = s.get("duration_months", 0)
@@ -76,9 +78,11 @@ def _check_career_duration_exceeds_yoe(c):
     else:
         chron_months = sum(j.get("duration_months", 0) for j in jobs)
 
-    cap = yoe * 12 + 24
+    career_sum = sum(j.get("duration_months", 0) for j in jobs)
+    effective_yoe = max(yoe, career_sum / 12.0)
+    cap = effective_yoe * 12 + 24
     if chron_months > cap * 1.5:
-        return 0.50, f"career span {chron_months:.0f}mo >> YOE {yoe}yr"
+        return 0.50, f"career span {chron_months:.0f}mo >> YOE {effective_yoe:.1f}yr"
     return 0.0, ""
 
 
