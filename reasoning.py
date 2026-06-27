@@ -129,26 +129,33 @@ def _engagement_facts(candidate: dict) -> dict:
 def _build_skill_segment(required: list[str], nice: list[str]) -> str:
     """Segment 2: JD Match."""
     if required:
-        skills_str = ", ".join(required[:2])
-        if len(required) > 2:
-            skills_str += f" and {required[2]}"
-        return f"Experience with {skills_str} aligns closely with the JD"
+        formatted_req = [_format_skill_name(s) for s in required]
+        skills_str = ", ".join(formatted_req[:2])
+        if len(formatted_req) > 2:
+            skills_str += f" and {formatted_req[2]}"
+        return f"Experience with {skills_str} aligns well with the JD"
     if nice:
-        skills_str = " and ".join(nice[:2])
-        return f"Shows some adjacent experience with {skills_str}, but lacks core retrieval skills"
-    return "Lacks direct ML/IR/retrieval skills matching the JD requirements"
+        formatted_nice = [_format_skill_name(s) for s in nice]
+        skills_str = " and ".join(formatted_nice[:2])
+        return f"Shows adjacent experience with {skills_str}, but limited evidence of core retrieval skills"
+    return "Limited evidence of direct ML/IR/retrieval skills matching the JD requirements"
 
 
 def _get_domain(required: list[str]) -> str:
-    if "Learning to Rank" in required:
+    req_lower = [r.lower() for r in required]
+    if "ndcg" in req_lower and "map" in req_lower:
+        return "ranking evaluation"
+    if "bm25" in req_lower and "faiss" in req_lower:
+        return "retrieval systems"
+    if "elasticsearch" in req_lower and "opensearch" in req_lower:
+        return "search platforms"
+    if "learning to rank" in req_lower:
         return "ranking systems"
-    if "Vector Search" in required:
+    if "vector search" in req_lower:
         return "vector search"
-    if "Recommendation Systems" in required:
-        return "recommendation systems"
-    if "Elasticsearch" in required or "OpenSearch" in required:
-        return "search platform"
-    if "Information Retrieval" in required:
+    if "recommendation systems" in req_lower:
+        return "recommendation engines"
+    if "information retrieval" in req_lower:
         return "retrieval systems"
     return "core engineering"
 
@@ -165,19 +172,20 @@ def _build_career_segment(candidate: dict, required: list[str], rank: int) -> st
     domain = _get_domain(required)
     title_company = f"{title} at {company}" if company else title
     
-    product_phrases = [
-        "at product companies",
-        "in product-driven environments",
-        "at scaled product organizations"
-    ]
-    phrase = product_phrases[(rank - 1) % len(product_phrases)]
+    var = rank % 3
+    if var == 0:
+        starter = f"{title_company}"
+    elif var == 1:
+        starter = f"Profile shows {title_company}"
+    else:
+        starter = f"Evidence includes {title_company}"
 
     if consulting_only:
-        return f"{title_company} with {yoe:.1f} years of experience at consulting/services firms"
+        return f"{starter} with {yoe:.1f} years of experience at consulting/services firms"
     elif pm >= 24:
-        return f"{title_company} with {yoe:.1f} years building {domain} {phrase}"
+        return f"{starter} with {yoe:.1f} years building {domain} in a product environment"
     else:
-        return f"{title_company} with {yoe:.1f} years of experience"
+        return f"{starter} with {yoe:.1f} years of experience"
 
 
 def _format_skill_name(skill: str) -> str:
@@ -200,22 +208,39 @@ def _format_skill_name(skill: str) -> str:
 
 def _build_engagement_segment(eng: dict, required: list[str], rank: int, has_concerns: bool) -> str:
     """Segment 3/Signals."""
-    parts = []
+    facts = []
     
-    if eng.get("rr", 0) >= 0.6 and eng.get("days_inactive", -1) >= 0 and eng.get("days_inactive", -1) <= 30:
-        parts.append("strong recruiter engagement")
-    
-    borderline = rank > 50 or has_concerns or len(required) < 3
-    if borderline and eng.get("assessments"):
+    inactive = eng.get("days_inactive", -1)
+    if inactive >= 0:
+        if inactive == 0:
+            facts.append("active today")
+        else:
+            facts.append(f"active {inactive} days ago")
+            
+    rr = eng.get("rr", 0.0)
+    if rr > 0:
+        facts.append(f"recruiter response rate {int(rr * 100)}%")
+        
+    notice = eng.get("notice", 0)
+    if notice > 0:
+        facts.append(f"notice period {notice} days")
+        
+    ir = eng.get("interview_rate", 0.0)
+    if ir > 0:
+        facts.append(f"interview completion {int(ir * 100)}%")
+        
+    if eng.get("assessments"):
         top_skill = max(eng["assessments"], key=eng["assessments"].get)
         top_score = eng["assessments"][top_skill]
-        if top_score >= 80:
-            parts.append(f"a strong {_format_skill_name(top_skill)} assessment ({top_score:.0f}/100)")
-            
-    if eng.get("interview_rate", 0) >= 0.8:
-        parts.append("consistent interview participation")
+        facts.append(f"{_format_skill_name(top_skill)} assessment: {top_score:.0f}/100")
         
-    return " and ".join(parts[:2])
+    if not facts:
+        return ""
+        
+    if len(facts) > 2:
+        facts = facts[:2]
+        
+    return " and ".join(facts)
 
 
 # ── Score-derived concern engine ──────────────────────────────────────────────
@@ -324,44 +349,6 @@ def _yoe_concern(candidate: dict, scores: dict, rank: int) -> str | None:
     return None
 
 
-# ── Varied sentence templates per rank tier ───────────────────────────────────
-
-_TOP20_CLEAN = [
-    "The ranking is further supported by {a} {mod} {domain} background{and_signals}.",
-    "This strong profile is backed by {mod} {domain} experience{and_signals}.",
-    "Ranked highly, with {a} {mod} {domain} background{and_signals} adding confidence.",
-]
-
-_TOP20_CONCERN = [
-    "Although {concern}, {a} {mod} {domain} background{and_signals} {supports} a top-tier ranking.",
-    "{A} {mod} {domain} background{and_signals} {helps} offset the fact that {concern}, making this one of the strongest matches.",
-    "While {concern}, {a} {mod} {domain} background{and_signals} {places} the candidate among the best overall fits.",
-    "{A} {mod} {domain} background{and_signals} {outweighs} the fact that {concern}.",
-    "While {concern}, this profile remains highly competitive due to {mod} {domain} experience{and_signals}.",
-]
-
-_TOP50_CLEAN = [
-    "{A} {mod} {domain} background{and_signals} {reinforces} this match.",
-    "A well-rounded profile, further supported by {mod} {domain} experience{and_signals}.",
-]
-
-_TOP50_CONCERN = [
-    "{A} {mod} {domain} background{and_signals} {is_are} a strong plus, though {concern} places this candidate below higher-ranked profiles.",
-    "A solid candidate backed by {a} {mod} {domain} background{and_signals}, but {concern} is a trade-off.",
-    "While {a} {mod} {domain} background{and_signals} {is_are} positive, {concern} keeps the ranking in the mid-tier.",
-]
-
-_TAIL_CONCERN = [
-    "Included near the cutoff because {concerns}.",
-    "Placed below stronger matches since {concerns}.",
-]
-
-_TAIL_CLEAN = [
-    "Included near the cutoff as adjacent experience may still be transferable.",
-    "Marginal match overall, as stronger candidates demonstrate deeper retrieval stack experience.",
-]
-
-
 def generate_reasoning(
     rank: int,
     candidate: dict,
@@ -391,68 +378,18 @@ def generate_reasoning(
     signals_str = _build_engagement_segment(eng, required, rank, bool(concerns))
 
     parts = [career_str + ".", skills_str + "."]
-
-    concern_text = concerns[0] if concerns else ""
-    concerns_joined = " and ".join(concerns) if concerns else ""
     
-    domain = _get_domain(required)
-    and_signals = f" and {signals_str}" if signals_str else ""
+    if signals_str:
+        parts.append(signals_str.capitalize() + ".")
 
-    modifiers = [
-        "solid",
-        "strong",
-        "deep",
-        "proven",
-        "extensive",
-        "hands-on",
-        "demonstrated",
-        "well-established",
-        "production"
-    ]
-    mod = modifiers[(rank - 1) % len(modifiers)]
-
-    idx = rank - 1
-    
-    is_plural = bool(signals_str)
-    
-    format_args = {
-        "mod": mod,
-        "domain": domain,
-        "and_signals": and_signals,
-        "concern": concern_text,
-        "a": "an" if mod == "extensive" else "a",
-        "A": "An" if mod == "extensive" else "A",
-        "supports": "support" if is_plural else "supports",
-        "helps": "help" if is_plural else "helps",
-        "places": "place" if is_plural else "places",
-        "outweighs": "outweigh" if is_plural else "outweighs",
-        "reinforces": "reinforce" if is_plural else "reinforces",
-        "is_are": "are" if is_plural else "is"
-    }
-
-    if rank <= 20:
-        if not concerns:
-            tpl = _TOP20_CLEAN[idx % len(_TOP20_CLEAN)]
-            parts.append(tpl.format(**format_args))
+    if concerns:
+        # Join multiple concerns naturally
+        if len(concerns) > 1:
+            concerns_joined = ", and ".join(concerns[:2])
         else:
-            tpl = _TOP20_CONCERN[idx % len(_TOP20_CONCERN)]
-            parts.append(tpl.format(**format_args))
-
-    elif rank <= 50:
-        if not concerns:
-            tpl = _TOP50_CLEAN[idx % len(_TOP50_CLEAN)]
-            parts.append(tpl.format(**format_args))
-        else:
-            tpl = _TOP50_CONCERN[idx % len(_TOP50_CONCERN)]
-            parts.append(tpl.format(**format_args))
-
-    else:
-        if concerns:
-            tpl = _TAIL_CONCERN[idx % len(_TAIL_CONCERN)]
-            parts.append(tpl.format(concerns=concerns_joined))
-        else:
-            tpl = _TAIL_CLEAN[idx % len(_TAIL_CLEAN)]
-            parts.append(tpl)
+            concerns_joined = concerns[0]
+        
+        parts.append(f"However, {concerns_joined}.")
 
     # Clean up multiple periods, ensure spacing
     reasoning = " ".join(parts).replace("..", ".").replace(" .", ".")
@@ -465,9 +402,25 @@ def generate_reasoning(
 if __name__ == "__main__":
     import json, sys
 
-    path = sys.argv[1] if len(sys.argv) > 1 else "/mnt/project/sample_candidates.json"
-    with open(path) as f:
-        candidates = json.load(f)
+    path = sys.argv[1] if len(sys.argv) > 1 else "./data/candidates.jsonl.gz"
+    from pathlib import Path
+    sample_path = Path(path)
+    if sample_path.suffix == ".gz":
+        import gzip
+        opener = gzip.open
+    else:
+        opener = open
+
+    try:
+        with opener(sample_path, "rt", encoding="utf-8") as f:
+            raw = f.read().strip()
+            if raw.startswith("["):
+                candidates = json.loads(raw)
+            else:
+                candidates = [json.loads(line) for line in raw.splitlines() if line.strip()]
+    except Exception as e:
+        print(f"Skipping smoke test: could not load candidates from {sample_path}")
+        candidates = []
 
     print(f"{'RANK':>4}  {'ID':12}  {'LEN':>4}  REASONING")
     print("-" * 100)
