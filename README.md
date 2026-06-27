@@ -11,8 +11,8 @@
 Deterministic, fully local candidate ranking pipeline for 100K profiles.  
 No LLMs, no GPUs, no network calls during ranking.
 
-Pipeline: **BM25 pre-filter → Hard gates → Honeypot detection → Full scoring → Ranked CSV**  
-Formula: `FinalScore = 0.75 × RelevanceScore + 0.25 × BehavioralScore`
+Pipeline: **BM25 pre-filter → Hard gates → Honeypot detection → Full scoring → Semantic Rerank → Cohort Rerank → Ranked CSV**  
+Formula: `FinalScore = 0.75 × RelevanceScore + 0.25 × BehavioralScore + Synergies`
 
 ---
 
@@ -23,11 +23,15 @@ resumesort/
 ├── rank.py                   # Main CLI — orchestrates the full pipeline
 ├── app.py                    # Streamlit sandbox (≤100 candidates, interactive)
 ├── bm25.py                   # BM25 inverted index for fast pre-filtering
-├── scorer.py                 # Core scorer (Relevance + Behavioral) — production version
+├── scorer.py                 # Core scorer (Relevance + Behavioral + Synergies)
+├── synergy.py                # Additive synergy bonuses and penalties
+├── reranker.py               # Semantic reranking with sentence-transformers
+├── cohort.py                 # Cohort-aware relative scoring
 ├── honeypot.py               # Synthetic profile detector (standalone CLI + library)
-├── reasoning.py              # Stage 4-compliant reasoning generator
+├── reasoning.py              # Spec-compliant reasoning generator
+├── download_models.py        # Pre-computes offline models for reranker
 ├── submission_metadata.yaml  # Team metadata, methodology, compute declarations
-├── requirements.txt          # Python dependencies (numpy, pandas, streamlit)
+├── requirements.txt          # Python dependencies
 └── .gitignore
 ```
 
@@ -123,7 +127,7 @@ Candidates are immediately excluded (score = 0.0) if they fail any gate:
 
 ### Stage 4 — Scoring
 
-**Final Score = 0.75 × RelevanceScore + 0.25 × BehavioralScore**
+**Final Score = 0.75 × RelevanceScore + 0.25 × BehavioralScore + Synergies**
 
 #### Relevance Score (75%)
 
@@ -146,7 +150,21 @@ Candidates are immediately excluded (score = 0.0) if they fail any gate:
 | Trust | 15% | Verified email/phone, LinkedIn linked, GitHub activity score, offer acceptance rate |
 | Skills quality | 10% | Platform assessment scores on must-have skills + endorsement count |
 
-### Stage 5 — Reasoning Generation
+#### Synergy Bonuses & Penalties (Additive)
+
+Evaluated via `synergy.py` and added to the Final Score:
+- Elite combination bonuses (e.g., strong ranking experience combined with infrastructure engineering).
+- Penalties for weak progression or mismatched titles.
+
+### Stage 5 — Semantic Reranking
+
+`reranker.py` takes the top 300 scored candidates and re-scores them using offline sentence-transformers (`all-MiniLM-L6-v2` and `bge-small-en-v1.5`). It measures deep semantic similarity between the candidate's combined text and the JD query, applying a targeted score multiplier.
+
+### Stage 6 — Cohort Comparison
+
+`cohort.py` compares the top 300 candidates against each other. It identifies the top 5% of candidates within the local cohort and applies relative cohort-based bonuses (e.g., "Top 5% in BM25 Score", "Top 5% in Experience").
+
+### Stage 7 — Reasoning Generation
 
 `reasoning.py` generates a unique, fact-grounded justification per candidate (Stage 4 compliance):
 
