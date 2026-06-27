@@ -172,20 +172,12 @@ def _build_career_segment(candidate: dict, required: list[str], rank: int) -> st
     domain = _get_domain(required)
     title_company = f"{title} at {company}" if company else title
     
-    var = rank % 3
-    if var == 0:
-        starter = f"{title_company}"
-    elif var == 1:
-        starter = f"Profile shows {title_company}"
-    else:
-        starter = f"Evidence includes {title_company}"
-
     if consulting_only:
-        return f"{starter} with {yoe:.1f} years of experience at consulting/services firms"
+        return f"{title_company} with {yoe:.1f} years of experience at consulting/services firms"
     elif pm >= 24:
-        return f"{starter} with {yoe:.1f} years building {domain} in a product environment"
+        return f"{title_company} with {yoe:.1f} years building {domain} in a product environment"
     else:
-        return f"{starter} with {yoe:.1f} years of experience"
+        return f"{title_company} with {yoe:.1f} years of experience"
 
 
 def _format_skill_name(skill: str) -> str:
