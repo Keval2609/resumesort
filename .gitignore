@@ -40,3 +40,4 @@ validate_submission.py
 graphify-out
 .pytest_cache
 New folder
+tests

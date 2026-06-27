@@ -48,7 +48,16 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Run Full Pipeline (CLI)
+### 2. Pre-computation (Model Download)
+
+The ranking pipeline uses sentence-transformers which require offline access to models during the time-constrained phase. Pre-download the models:
+
+```bash
+python download_models.py
+```
+*(This is a pre-computation step and is allowed to exceed the 5-minute ranking constraint.)*
+
+### 3. Run Full Pipeline (CLI)
 
 ```bash
 python rank.py --candidates ./candidates.jsonl --out ./SignalOverNoise-108.csv
@@ -65,7 +74,7 @@ Optional flags:
 | `--out` | `./final_output.csv` | Output CSV path |
 | `--sample N` | — | Score only first N candidates (local testing) |
 
-### 3. Interactive Sandbox (Streamlit)
+### 4. Interactive Sandbox (Streamlit)
 
 ```bash
 streamlit run app.py
@@ -74,7 +83,7 @@ streamlit run app.py
 Accepts a `.json` array or `.jsonl` file (≤100 candidates). Runs the full pipeline and outputs a downloadable ranked CSV.  
 Live deployment: [resumesort-signalovernoise-108.streamlit.app](https://resumesort-signalovernoise-108.streamlit.app/)
 
-### 4. Validate Output
+### 5. Validate Output
 
 ```bash
 python validate_submission.py SignalOverNoise-108.csv

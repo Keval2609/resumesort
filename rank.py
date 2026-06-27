@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 
 import argparse
 import csv
@@ -14,6 +13,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from bm25 import build_index, tokenize, JD_QUERY
 from scorer import final_score
 from reasoning import generate_reasoning
+from reranker import semantic_rerank
+from cohort import cohort_rerank
 
 # ── logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -211,6 +212,19 @@ def run_pipeline(candidates: list[dict]) -> list[dict]:
 
     elapsed = time.perf_counter() - t2
     log.info(f"Scored {len(scored):,} candidates in {elapsed:.1f}s")
+
+    # ── Step 3.5: Semantic reranking (top-300 only) ───────────────────────
+    scored.sort(key=lambda r: (-r["final"], r["candidate_id"]))
+    candidates_by_id_local = {c["candidate_id"]: c for c in candidates_to_score}
+
+    t3 = time.perf_counter()
+    scored = semantic_rerank(scored, candidates_by_id_local, top_n=300)
+    log.info(f"Semantic reranking took {time.perf_counter()-t3:.1f}s")
+
+    # ── Step 3.6: Cohort-aware comparison (top-300) ───────────────────────
+    t4 = time.perf_counter()
+    scored = cohort_rerank(scored, candidates_by_id_local, top_n=300)
+    log.info(f"Cohort reranking took {time.perf_counter()-t4:.1f}s")
 
     # ── Step 4: Sort + select top-100 ─────────────────────────────────────
     # Primary: final score desc

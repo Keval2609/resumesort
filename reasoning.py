@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 
 from __future__ import annotations
 
@@ -125,111 +124,114 @@ def _engagement_facts(candidate: dict) -> dict:
 
 # ── Segment builders ──────────────────────────────────────────────────────────
 
+# ── Segment builders ──────────────────────────────────────────────────────────
+
 def _build_skill_segment(required: list[str], nice: list[str]) -> str:
-    """Segment 1: skill match with JD."""
+    """Segment 2: JD Match."""
     if required:
-        parts = f"matches JD on: {', '.join(required[:3])}"
-        if nice:
-            parts += f"; bonus: {nice[0]}"
-        return parts
+        skills_str = ", ".join(required[:2])
+        if len(required) > 2:
+            skills_str += f" and {required[2]}"
+        return f"Experience with {skills_str} aligns closely with the JD"
     if nice:
-        return f"no core IR/retrieval skills matched; adjacent: {', '.join(nice[:2])}"
-    return "no direct ML/IR/retrieval skill match with JD"
+        skills_str = " and ".join(nice[:2])
+        return f"Shows some adjacent experience with {skills_str}, but lacks core retrieval skills"
+    return "Lacks direct ML/IR/retrieval skills matching the JD requirements"
 
 
-def _build_career_segment(candidate: dict) -> str:
-    """Segment 2: career background honesty."""
+def _get_domain(required: list[str]) -> str:
+    if "Learning to Rank" in required:
+        return "ranking systems"
+    if "Vector Search" in required:
+        return "vector search"
+    if "Recommendation Systems" in required:
+        return "recommendation systems"
+    if "Elasticsearch" in required or "OpenSearch" in required:
+        return "search platform"
+    if "Information Retrieval" in required:
+        return "retrieval systems"
+    return "core engineering"
+
+
+def _build_career_segment(candidate: dict, required: list[str], rank: int) -> str:
+    """Segment 1: Candidate Facts."""
     profile = candidate.get("profile", {})
     title = profile.get("current_title", "Engineer")
     company = profile.get("current_company", "")
-    career_months = _career_months(candidate)
     yoe = _effective_yoe(candidate)
-    pm = min(_product_months(candidate), career_months)
+    pm = min(_product_months(candidate), _career_months(candidate))
     consulting_only = _is_consulting_only(candidate)
 
-    base = f"{yoe:.1f}yr career, currently {title} at {company}"
+    domain = _get_domain(required)
+    title_company = f"{title} at {company}" if company else title
+    
+    product_phrases = [
+        "at product companies",
+        "in product-driven environments",
+        "at scaled product organizations"
+    ]
+    phrase = product_phrases[(rank - 1) % len(product_phrases)]
 
     if consulting_only:
-        base += "; entire career in services/consulting firms (JD disqualifier risk)"
-    elif pm >= 36:
-        base += f"; {pm//12}yr+ at product companies"
-    elif pm > 0:
-        base += f"; {pm}mo product-company experience"
+        return f"{title_company} with {yoe:.1f} years of experience at consulting/services firms"
+    elif pm >= 24:
+        return f"{title_company} with {yoe:.1f} years building {domain} {phrase}"
     else:
-        base += "; minimal product-company exposure"
-
-    return base
+        return f"{title_company} with {yoe:.1f} years of experience"
 
 
-def _build_engagement_segment(eng: dict) -> str:
-    """Segment 3: engagement summary with concrete numbers."""
+def _format_skill_name(skill: str) -> str:
+    overrides = {
+        "faiss": "FAISS",
+        "lora": "LoRA",
+        "nlp": "NLP",
+        "llm": "LLM",
+        "aws": "AWS",
+        "gcp": "GCP",
+        "ml": "ML",
+        "ai": "AI",
+        "ndcg": "NDCG",
+        "bm25": "BM25",
+        "mrr": "MRR",
+        "map": "MAP"
+    }
+    return overrides.get(skill.lower(), skill.title())
+
+
+def _build_engagement_segment(eng: dict, required: list[str], rank: int, has_concerns: bool) -> str:
+    """Segment 3/Signals."""
     parts = []
-
-    # Availability
-    if eng["open"]:
-        parts.append("open-to-work flag set")
-    if eng["days_inactive"] == -1:
-        parts.append("activity date not available")
-    elif eng["days_inactive"] < 14:
-        parts.append(f"active {eng['days_inactive']}d ago")
-    elif eng["days_inactive"] < 60:
-        parts.append(f"last active {eng['days_inactive']}d ago")
-    else:
-        parts.append(f"inactive {eng['days_inactive']}d (low hire probability)")
-
-    # Responsiveness
-    rr_pct = f"{eng['rr']:.0%}"
-    if eng["rr"] >= 0.7:
-        parts.append(f"high recruiter response rate ({rr_pct})")
-    elif eng["rr"] <= 0.15:
-        parts.append(f"very low response rate ({rr_pct})")
-    else:
-        parts.append(f"response rate {rr_pct}")
-
-    # Notice
-    notice = eng["notice"]
-    if notice == 0:
-        parts.append("immediate joiner")
-    elif notice <= JD_NOTICE_SOFT:
-        parts.append(f"notice {notice}d (within JD soft limit)")
-    elif notice <= JD_NOTICE_HARD:
-        parts.append(f"notice {notice}d (buyout possible)")
-    else:
-        parts.append(f"notice {notice}d (exceeds JD hard limit of {JD_NOTICE_HARD}d)")
-
-    return "; ".join(parts)
-
-
-def _build_signal_segment(eng: dict) -> str:
-    """Segment 4: extra positive/negative signals."""
-    parts = []
-    if eng["assessments"]:
+    
+    if eng.get("rr", 0) >= 0.6 and eng.get("days_inactive", -1) >= 0 and eng.get("days_inactive", -1) <= 30:
+        parts.append("strong recruiter engagement")
+    
+    borderline = rank > 50 or has_concerns or len(required) < 3
+    if borderline and eng.get("assessments"):
         top_skill = max(eng["assessments"], key=eng["assessments"].get)
         top_score = eng["assessments"][top_skill]
-        parts.append(f"platform assessment: {top_skill} {top_score:.0f}/100")
-    if eng["interview_rate"] >= 0.8:
-        parts.append(f"high interview completion ({eng['interview_rate']:.0%})")
-    elif eng["interview_rate"] < 0.4:
-        parts.append(f"low interview show-up rate ({eng['interview_rate']:.0%})")
-    return "; ".join(parts) if parts else ""
+        if top_score >= 80:
+            parts.append(f"a strong {_format_skill_name(top_skill)} assessment ({top_score:.0f}/100)")
+            
+    if eng.get("interview_rate", 0) >= 0.8:
+        parts.append("consistent interview participation")
+        
+    return " and ".join(parts[:2])
 
 
 # ── Score-derived concern engine ──────────────────────────────────────────────
 
-# Weight = actual impact on final score (component_weight × parent_weight)
 SCORE_LABELS = {
-    "skills_s":    (0.315, "skill coverage"),        # 0.45 × 0.70
-    "exp_s":       (0.175, "experience fit"),         # 0.25 × 0.70
-    "title_s":     (0.105, "title alignment"),        # 0.15 × 0.70
-    "readiness_s": (0.090, "availability/notice"),    # 0.30 × 0.30
-    "recruiter_s": (0.075, "recruiter engagement"),   # 0.25 × 0.30
-    "prof_s":      (0.060, "professionalism"),        # 0.20 × 0.30
-    "trust_s":     (0.045, "trust signals"),          # 0.15 × 0.30
-    "edu_s":       (0.056, "education"),              # 0.08 × 0.70
-    "loc_s":       (0.035, "location fit"),           # 0.05 × 0.70
+    "skills_s":    (0.315, "skill coverage"),
+    "exp_s":       (0.175, "experience fit"),
+    "title_s":     (0.105, "title alignment"),
+    "readiness_s": (0.090, "availability/notice"),
+    "recruiter_s": (0.075, "recruiter engagement"),
+    "prof_s":      (0.060, "professionalism"),
+    "trust_s":     (0.045, "trust signals"),
+    "edu_s":       (0.056, "education"),
+    "loc_s":       (0.035, "location fit"),
 }
 
-# Thresholds: below these the component is flagged as a concern
 CONCERN_THRESHOLD = {
     "skills_s":    0.55,
     "exp_s":       0.55,
@@ -239,12 +241,11 @@ CONCERN_THRESHOLD = {
     "prof_s":      0.45,
     "trust_s":     0.40,
     "edu_s":       0.40,
-    "loc_s":       0.60,   # location threshold higher — JD is location-sensitive
+    "loc_s":       0.60,
 }
 
 
 def _concerns_from_scores(scores: dict, top_n: int = 2) -> list[tuple[str, float]]:
-    """Returns [(key, val), ...] sorted by impact. Caller humanizes."""
     if not scores:
         return []
 
@@ -265,100 +266,116 @@ def _humanize_concern(
     candidate: dict,
     eng: dict,
 ) -> str | None:
-    """
-    Converts a weak score key into a recruiter-readable sentence.
-    Returns None for 'exp_s' — handled separately by _yoe_concern.
-    """
     if key == "exp_s":
         return None
 
     if key == "skills_s":
-        return "limited coverage of core JD skills (embeddings, IR, vector search)"
+        return "limited evidence of core retrieval or ranking systems"
 
     if key == "title_s":
         title = candidate.get("profile", {}).get("current_title", "current role")
-        return f"current title ({title!r}) not aligned with ML/IR engineering"
+        return f"current title ({title}) is broader than the JD requires"
 
     if key == "readiness_s":
         notice = eng["notice"]
         inactive = eng["days_inactive"]
         if notice > JD_NOTICE_HARD:
-            return f"{notice}-day notice period exceeds the {JD_NOTICE_HARD}-day JD limit"
+            return f"the {notice}-day notice period exceeds preferences"
         if notice > JD_NOTICE_SOFT:
-            return f"{notice}-day notice is above the preferred {JD_NOTICE_SOFT}-day window"
+            return f"the {notice}-day notice period is a minor trade-off"
         if inactive > 0 and inactive > 90:
-            return f"profile inactive for {inactive} days"
-        return "low recent job-search activity"
+            return f"profile has been inactive for {inactive} days"
+        return "job-search activity is low"
 
     if key == "recruiter_s":
-        return "low recruiter engagement in the past 30 days"
+        return "recruiter engagement is currently low"
 
     if key == "prof_s":
-        return f"recruiter response rate is low ({eng['rr']:.0%})"
+        return "recruiter response rate is relatively low"
 
     if key == "trust_s":
-        return "limited verifiable profile signals"
+        return "there are limited verifiable profile signals"
 
     if key == "edu_s":
-        return "educational background outside core CS/ML fields"
+        return "educational background is outside core CS/ML fields"
 
     if key == "loc_s":
         loc_ok, loc_label = _location_status(candidate)
         if not loc_ok:
-            return f"located outside preferred cities ({loc_label}); relocation required"
+            return "relocation may be required"
         return "location is a minor consideration"
 
     return None
 
 
 def _yoe_concern(candidate: dict, scores: dict, rank: int) -> str | None:
-    """
-    Explicit YOE concern — score-derived concerns can't distinguish
-    underqualified vs overqualified vs low-depth from exp_s alone.
-    Only fires if exp_s is actually weak.
-    """
     yoe = _effective_yoe(candidate)
     exp_s = scores.get("exp_s", 1.0)
 
-    # Only surface YOE concern if experience score is actually hurting
     if exp_s >= 0.65:
         return None
 
     if yoe < 5:
-        concern = f"underqualified at {yoe:.1f}yr (JD: 5–9yr)"
-        if rank <= 30:
-            required = _matched_required(candidate)
-            if required:
-                return f"{concern}, offset partially by {required[0]} depth"
-        return concern
+        return f"experience is slightly below the preferred range ({yoe:.1f} years)"
 
     if yoe > 12:
-        concern = f"overqualified at {yoe:.1f}yr — IC-fit risk"
-        if rank <= 30:
-            return f"{concern}, though product-company depth remains relevant"
-        return concern
+        return f"extensive experience ({yoe:.1f} years) poses a slight IC-fit risk"
 
-    # exp_s low but YOE is in range → low product-AI depth (handled by score label)
     return None
+
+
+# ── Varied sentence templates per rank tier ───────────────────────────────────
+
+_TOP20_CLEAN = [
+    "The ranking is further supported by {a} {mod} {domain} background{and_signals}.",
+    "This strong profile is backed by {mod} {domain} experience{and_signals}.",
+    "Ranked highly, with {a} {mod} {domain} background{and_signals} adding confidence.",
+]
+
+_TOP20_CONCERN = [
+    "Although {concern}, {a} {mod} {domain} background{and_signals} {supports} a top-tier ranking.",
+    "{A} {mod} {domain} background{and_signals} {helps} offset the fact that {concern}, making this one of the strongest matches.",
+    "While {concern}, {a} {mod} {domain} background{and_signals} {places} the candidate among the best overall fits.",
+    "{A} {mod} {domain} background{and_signals} {outweighs} the fact that {concern}.",
+    "While {concern}, this profile remains highly competitive due to {mod} {domain} experience{and_signals}.",
+]
+
+_TOP50_CLEAN = [
+    "{A} {mod} {domain} background{and_signals} {reinforces} this match.",
+    "A well-rounded profile, further supported by {mod} {domain} experience{and_signals}.",
+]
+
+_TOP50_CONCERN = [
+    "{A} {mod} {domain} background{and_signals} {is_are} a strong plus, though {concern} places this candidate below higher-ranked profiles.",
+    "A solid candidate backed by {a} {mod} {domain} background{and_signals}, but {concern} is a trade-off.",
+    "While {a} {mod} {domain} background{and_signals} {is_are} positive, {concern} keeps the ranking in the mid-tier.",
+]
+
+_TAIL_CONCERN = [
+    "Included near the cutoff because {concerns}.",
+    "Placed below stronger matches since {concerns}.",
+]
+
+_TAIL_CLEAN = [
+    "Included near the cutoff as adjacent experience may still be transferable.",
+    "Marginal match overall, as stronger candidates demonstrate deeper retrieval stack experience.",
+]
 
 
 def generate_reasoning(
     rank: int,
     candidate: dict,
     score: float,
-    scores: dict = None,        # ← full score dict from final_score()
+    scores: dict = None,
 ) -> str:
 
     required = _matched_required(candidate)
     nice     = _matched_nice(candidate)
     eng      = _engagement_facts(candidate)
-    loc_ok, loc_label = _location_status(candidate)
 
-    career  = _build_career_segment(candidate)
-    skills  = _build_skill_segment(required, nice)
-    signals = _build_signal_segment(eng)
+    career_str = _build_career_segment(candidate, required, rank)
+    skills_str = _build_skill_segment(required, nice)
 
-    # ── Score-derived concerns → humanized text ───────────────────────────
     raw_concerns = _concerns_from_scores(scores or {})
     concerns = []
     for key, val in raw_concerns:
@@ -366,67 +383,82 @@ def generate_reasoning(
         if text:
             concerns.append(text)
 
-    # ── Inject YOE concern if applicable ─────────────────────────────────
     yoe_c = _yoe_concern(candidate, scores or {}, rank)
     if yoe_c:
-        concerns = [c for c in concerns if "experience fit" not in c]
+        concerns = [c for c in concerns if "experience" not in c]
         concerns.insert(0, yoe_c)
 
-    parts = [career + ".", skills + "."]
+    signals_str = _build_engagement_segment(eng, required, rank, bool(concerns))
 
-    # ── Rank-tier framing ─────────────────────────────────────────────────
-    strength = required[0] if required else "overall profile strength"
+    parts = [career_str + ".", skills_str + "."]
 
-    if rank <= 10:
-        if signals:
-            parts.append(signals.capitalize() + ".")
+    concern_text = concerns[0] if concerns else ""
+    concerns_joined = " and ".join(concerns) if concerns else ""
+    
+    domain = _get_domain(required)
+    and_signals = f" and {signals_str}" if signals_str else ""
+
+    modifiers = [
+        "solid",
+        "strong",
+        "deep",
+        "proven",
+        "extensive",
+        "hands-on",
+        "demonstrated",
+        "well-established",
+        "production"
+    ]
+    mod = modifiers[(rank - 1) % len(modifiers)]
+
+    idx = rank - 1
+    
+    is_plural = bool(signals_str)
+    
+    format_args = {
+        "mod": mod,
+        "domain": domain,
+        "and_signals": and_signals,
+        "concern": concern_text,
+        "a": "an" if mod == "extensive" else "a",
+        "A": "An" if mod == "extensive" else "A",
+        "supports": "support" if is_plural else "supports",
+        "helps": "help" if is_plural else "helps",
+        "places": "place" if is_plural else "places",
+        "outweighs": "outweigh" if is_plural else "outweighs",
+        "reinforces": "reinforce" if is_plural else "reinforces",
+        "is_are": "are" if is_plural else "is"
+    }
+
+    if rank <= 20:
         if not concerns:
-            parts.append("Strong overall fit for the founding AI engineer role.")
+            tpl = _TOP20_CLEAN[idx % len(_TOP20_CLEAN)]
+            parts.append(tpl.format(**format_args))
         else:
-            parts.append(
-                f"{concerns[0].capitalize()}, but {strength} expertise "
-                f"and product-company background justify the high ranking."
-            )
-
-    elif rank <= 30:
-        if signals:
-            parts.append(signals.capitalize() + ".")
-        if not concerns:
-            parts.append("Solid fit; ranked here on overall profile strength.")
-        else:
-            parts.append(
-                f"Strong candidate; note: {concerns[0]}."
-            )
+            tpl = _TOP20_CONCERN[idx % len(_TOP20_CONCERN)]
+            parts.append(tpl.format(**format_args))
 
     elif rank <= 50:
-        if signals:
-            parts.append(signals.capitalize() + ".")
-        if concerns:
-            parts.append(f"Main concern: {'; '.join(concerns)}.")
-
-    elif rank <= 84:
-        if concerns:
-            parts.append(f"Ranked here due to: {'; '.join(concerns)}.")
+        if not concerns:
+            tpl = _TOP50_CLEAN[idx % len(_TOP50_CLEAN)]
+            parts.append(tpl.format(**format_args))
         else:
-            parts.append(
-                "Borderline match — weaker than higher-ranked candidates overall."
-            )
+            tpl = _TOP50_CONCERN[idx % len(_TOP50_CONCERN)]
+            parts.append(tpl.format(**format_args))
 
     else:
         if concerns:
-            parts.append(
-                f"Near cutoff — {'; '.join(concerns)}."
-            )
+            tpl = _TAIL_CONCERN[idx % len(_TAIL_CONCERN)]
+            parts.append(tpl.format(concerns=concerns_joined))
         else:
-            parts.append(
-                "Included at tail as marginal match across multiple dimensions."
-            )
+            tpl = _TAIL_CLEAN[idx % len(_TAIL_CLEAN)]
+            parts.append(tpl)
 
-    reasoning = " ".join(parts)
-    if len(reasoning) > 340:
-        reasoning = reasoning[:337].rstrip() + "..."
+    # Clean up multiple periods, ensure spacing
+    reasoning = " ".join(parts).replace("..", ".").replace(" .", ".")
 
     return reasoning
+
 
 
 # ── CLI smoke test ────────────────────────────────────────────────────────────

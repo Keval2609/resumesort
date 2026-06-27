@@ -163,6 +163,10 @@ ndcg mrr map evaluation framework a/b testing offline online
 fine-tuning lora peft xgboost lightgbm learning to rank
 information retrieval nlp feature engineering mlops
 product company startup founding team
+recommendation engine search relevance dense retrieval semantic search
+candidate matching retrieval pipeline search platform relevance engineering
+ann search hnsw vector indexing hybrid retrieval personalization
+search infrastructure retrieval optimization reranking query understanding
 """
 
 
