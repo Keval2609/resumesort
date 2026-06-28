@@ -60,13 +60,32 @@ def _load_model():
         return None
 
     for name in [MODEL_NAME, FALLBACK_MODEL_NAME]:
+        # Try local cache first to avoid network calls (critical for offline Docker environment)
+        import os
+        old_offline = os.environ.get("HF_HUB_OFFLINE")
         try:
-            log.info(f"Loading embedding model: {name}")
+            log.info(f"Loading embedding model (local cache): {name}")
+            os.environ["HF_HUB_OFFLINE"] = "1"
             _model = SentenceTransformer(name)
-            log.info(f"Loaded embedding model: {name}")
+            log.info(f"Loaded embedding model from local cache: {name}")
             return _model
-        except Exception as e:
-            log.warning(f"Failed to load {name}: {e}")
+        except Exception as e_local:
+            log.warning(f"Could not load {name} from local cache: {e_local}. Trying online/download...")
+            try:
+                if old_offline is not None:
+                    os.environ["HF_HUB_OFFLINE"] = old_offline
+                else:
+                    os.environ.pop("HF_HUB_OFFLINE", None)
+                _model = SentenceTransformer(name)
+                log.info(f"Loaded embedding model: {name}")
+                return _model
+            except Exception as e:
+                log.warning(f"Failed to load {name} online: {e}")
+        finally:
+            if old_offline is not None:
+                os.environ["HF_HUB_OFFLINE"] = old_offline
+            else:
+                os.environ.pop("HF_HUB_OFFLINE", None)
 
     log.warning("No embedding model available. Semantic reranking disabled.")
     _model = None

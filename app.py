@@ -115,7 +115,7 @@ rows_for_table = []
 with st.spinner("Generating reasoning strings..."):
     for rank, r in enumerate(top_results, 1):
         cid = r["candidate_id"]
-        reasoning = generate_reasoning(rank, cand_by_id[cid], r["final"])
+        reasoning = generate_reasoning(rank, cand_by_id[cid], r["final"], scores=r)
         writer.writerow([cid, rank, f"{r['final']:.6f}", reasoning])
         rows_for_table.append({
             "rank":         rank,

@@ -58,12 +58,12 @@ methodology_summary: |
   Rule-based ranker with BM25 pre-filter + multi-factor scorer.
   Pipeline: BM25 retrieval (top 5000) → hard gates (open-to-work, salary,
   work-mode) → honeypot detection → full scoring.
-  FinalScore = 0.70 × RelevanceScore + 0.30 × BehavioralScore.
+  FinalScore = 0.75 × RelevanceScore + 0.25 × BehavioralScore.
   Relevance weights: skills (0.45), experience (0.25), title (0.15),
   education (0.08), location (0.05), certifications (0.02).
   Behavioral weights: readiness (0.30), recruiter interest (0.25),
   professionalism (0.20), trust (0.15), skills quality (0.10).
-  Runtime ~15s for full 100K pool on CPU.
+  Runtime ~2 min for full 100K pool on CPU.
 
 # ============================================================================
 # Declarations

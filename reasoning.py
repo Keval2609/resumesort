@@ -160,6 +160,70 @@ def _get_domain(required: list[str]) -> str:
     return "core engineering"
 
 
+def _get_action_phrase(domain: str, company: str, variant_idx: int) -> str:
+    co_lower = company.lower().strip() if company else ""
+    is_product_co = bool(
+        co_lower
+        and not any(cf in co_lower for cf in CONSULTING_FIRMS)
+        and not any(kw in co_lower for kw in ["consulting", "it services", "services", "solutions"])
+    )
+
+    domain_mappings = {
+        "ranking evaluation": {
+            "prod": "building production ranking evaluation systems",
+            "scale": "working on large-scale ranking evaluation infrastructure",
+            "dev": "developing ranking evaluation methods",
+            "default": "building ranking evaluation in a product environment"
+        },
+        "retrieval systems": {
+            "prod": "building production retrieval systems",
+            "scale": "working on large-scale retrieval systems",
+            "dev": "developing retrieval systems",
+            "default": "building retrieval systems in a product environment"
+        },
+        "search platforms": {
+            "prod": "building production search platforms",
+            "scale": "working on large-scale search platforms",
+            "dev": "developing search platforms",
+            "default": "building search platforms in a product environment"
+        },
+        "ranking systems": {
+            "prod": "building production ranking systems",
+            "scale": "working on large-scale ranking systems",
+            "dev": "developing ranking systems",
+            "default": "building ranking systems in a product environment"
+        },
+        "vector search": {
+            "prod": "building production vector search systems",
+            "scale": "working on large-scale vector search infrastructure",
+            "dev": "developing vector search engines",
+            "default": "building vector search in a product environment"
+        },
+        "recommendation engines": {
+            "prod": "building production recommendation engines",
+            "scale": "working on large-scale recommendation systems",
+            "dev": "developing recommendation engines",
+            "default": "building recommendation engines in a product environment"
+        },
+        "core engineering": {
+            "prod": "building production systems",
+            "scale": "working on large-scale core engineering infrastructure",
+            "dev": "developing core systems",
+            "default": "working on core engineering in a product environment"
+        }
+    }
+
+    mapping = domain_mappings.get(domain, domain_mappings["core engineering"])
+
+    if is_product_co:
+        choices = ["prod", "scale", "dev"]
+    else:
+        choices = ["prod", "scale", "dev", "default"]
+
+    selected_choice = choices[variant_idx % len(choices)]
+    return mapping[selected_choice]
+
+
 def _build_career_segment(candidate: dict, required: list[str], rank: int) -> str:
     """Segment 1: Candidate Facts."""
     profile = candidate.get("profile", {})
@@ -172,12 +236,38 @@ def _build_career_segment(candidate: dict, required: list[str], rank: int) -> st
     domain = _get_domain(required)
     title_company = f"{title} at {company}" if company else title
     
+    cid = candidate.get("candidate_id", "")
+    cid_hash = sum(ord(char) for char in cid) if cid else 0
+    variant = cid_hash % 5
+    
     if consulting_only:
-        return f"{title_company} with {yoe:.1f} years of experience at consulting/services firms"
+        templates = [
+            f"{title_company} with {yoe:.1f} years of experience at consulting/services firms",
+            f"Currently working as {title_company} with {yoe:.1f} years of experience at consulting/services firms",
+            f"Most recent role is {title_company} with {yoe:.1f} years of experience at consulting/services firms",
+            f"Career spans {yoe:.1f} years, currently as {title_company} at consulting/services firms",
+            f"Recent experience includes {title_company} with {yoe:.1f} years at consulting/services firms"
+        ]
+        return templates[variant]
     elif pm >= 24:
-        return f"{title_company} with {yoe:.1f} years building {domain} in a product environment"
+        action = _get_action_phrase(domain, company, variant)
+        templates = [
+            f"{title_company} with {yoe:.1f} years {action}",
+            f"Currently working as {title_company}, with {yoe:.1f} years {action}",
+            f"Most recent role is {title_company}, bringing {yoe:.1f} years {action}",
+            f"Career spans {yoe:.1f} years, currently as {title_company} {action}",
+            f"Recent experience includes working as {title_company} with {yoe:.1f} years {action}"
+        ]
+        return templates[variant]
     else:
-        return f"{title_company} with {yoe:.1f} years of experience"
+        templates = [
+            f"{title_company} with {yoe:.1f} years of experience",
+            f"Currently working as {title_company} with {yoe:.1f} years of experience",
+            f"Most recent role is {title_company} with {yoe:.1f} years of experience",
+            f"Career spans {yoe:.1f} years, currently as {title_company}",
+            f"Recent experience includes {title_company} with {yoe:.1f} years of experience"
+        ]
+        return templates[variant]
 
 
 def _format_skill_name(skill: str) -> str:
