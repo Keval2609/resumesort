@@ -41,6 +41,8 @@ resumesort/
 
 ### 1. Setup
 
+Activate your virtual environment and run:
+
 ```bash
 python -m venv .venv
 
@@ -58,15 +60,15 @@ The ranking pipeline uses sentence-transformers which require offline access to 
 
 ```bash
 python download_models.py
-```
-*(This is a pre-computation step and is allowed to exceed the 5-minute ranking constraint.)*
-*(Used text embedding models "sentence-transformers/all-MiniLM-L6-v2" & "BAAI/bge-small-en-v1.5" for reranking)*
 
 ### 3. Run Full Pipeline (CLI)
 
 ```bash
 python rank.py --candidates ./candidates.jsonl --out ./SignalOverNoise-108.csv
 ```
+
+- `download_models.py` is a one-time setup step to download and cache the embedding models locally.
+- `rank.py` runs completely offline after that. No internet is required during ranking.
 
 Produces a spec-compliant CSV: 100 rows, header, UTF-8, monotone scores.  
 **Runtime:** ~2 min on a 16 GB CPU-only machine.

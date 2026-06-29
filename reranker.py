@@ -37,10 +37,12 @@ _model = None
 _model_loaded = False
 
 
+import sys
+
 def _load_model():
     """
     Lazy-load sentence-transformers model.
-    Returns the model, or None if unavailable.
+    Returns the model. Exits with non-zero if unavailable.
     """
     global _model, _model_loaded
     if _model_loaded:
@@ -51,45 +53,31 @@ def _load_model():
     try:
         from sentence_transformers import SentenceTransformer
     except ImportError:
-        log.warning(
-            "sentence-transformers not installed. "
-            "Semantic reranking disabled — install with: "
-            "pip install sentence-transformers"
-        )
-        _model = None
-        return None
+        log.error("sentence-transformers not installed. Exiting.")
+        sys.exit(1)
 
-    for name in [MODEL_NAME, FALLBACK_MODEL_NAME]:
-        # Try local cache first to avoid network calls (critical for offline Docker environment)
-        import os
-        old_offline = os.environ.get("HF_HUB_OFFLINE")
+    log.info("Loading embedding model from local cache...\n")
+
+    try:
+        _model = SentenceTransformer(MODEL_NAME, local_files_only=True)
+        log.info(f"Loaded:\n{MODEL_NAME}\n\nSemantic reranking enabled.")
+        return _model
+    except Exception as e_primary:
+        log.info(f"Primary model not found locally.\n\nLoading fallback model...")
         try:
-            log.info(f"Loading embedding model (local cache): {name}")
-            os.environ["HF_HUB_OFFLINE"] = "1"
-            _model = SentenceTransformer(name)
-            log.info(f"Loaded embedding model from local cache: {name}")
+            _model = SentenceTransformer(FALLBACK_MODEL_NAME, local_files_only=True)
+            log.info(f"Loaded:\n{FALLBACK_MODEL_NAME}")
             return _model
-        except Exception as e_local:
-            log.warning(f"Could not load {name} from local cache: {e_local}. Trying online/download...")
-            try:
-                if old_offline is not None:
-                    os.environ["HF_HUB_OFFLINE"] = old_offline
-                else:
-                    os.environ.pop("HF_HUB_OFFLINE", None)
-                _model = SentenceTransformer(name)
-                log.info(f"Loaded embedding model: {name}")
-                return _model
-            except Exception as e:
-                log.warning(f"Failed to load {name} online: {e}")
-        finally:
-            if old_offline is not None:
-                os.environ["HF_HUB_OFFLINE"] = old_offline
-            else:
-                os.environ.pop("HF_HUB_OFFLINE", None)
-
-    log.warning("No embedding model available. Semantic reranking disabled.")
-    _model = None
-    return None
+        except Exception as e_fallback:
+            log.error("No local embedding model found.\n\nSemantic reranking disabled.\n\nRun:\n\npython download_models.py\n")
+            sys.stderr.write(
+                "ERROR: No local embedding model found.\n\n"
+                "Semantic reranking is required to reproduce the submitted ranking.\n\n"
+                "Please run:\n\n"
+                "python download_models.py\n\n"
+                "and retry.\n"
+            )
+            sys.exit(1)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
