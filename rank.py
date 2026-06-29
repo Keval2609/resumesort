@@ -174,9 +174,6 @@ def validate_output(out_path: Path, valid_ids: set[str]) -> bool:
 def run_pipeline(candidates: list[dict]) -> list[dict]:
     """
     Full ranking pipeline:
-      1. BM25 pre-filter → top BM25_PREFILTER_K candidates
-      2. Full scorer    → relevance + behavioral scores
-      3. Sort + top-100
     """
     t0 = time.perf_counter()
 

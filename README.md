@@ -2,14 +2,14 @@
 
 **Team:** SignalOverNoise-108  
 **Challenge:** Intelligent Candidate Discovery & Ranking  
-**Target Role:** Senior AI Engineer — Founding Team  
+**Target Role:** Junior Machine Learning Engineer  
 
 ---
 
 ## Overview
 
 Deterministic, fully local candidate ranking pipeline for 100K profiles.  
-No LLMs, no GPUs, no network calls during ranking.
+No LLMs, no GPUs, no network calls during ranking. (Pre-computes offline text embedding models for reranker)
 
 Pipeline: **BM25 pre-filter → Hard gates → Honeypot detection → Full scoring → Semantic Rerank → Cohort Rerank → Ranked CSV**  
 Formula: `FinalScore = 0.75 × RelevanceScore + 0.25 × BehavioralScore + Synergies`
@@ -60,6 +60,7 @@ The ranking pipeline uses sentence-transformers which require offline access to 
 python download_models.py
 ```
 *(This is a pre-computation step and is allowed to exceed the 5-minute ranking constraint.)*
+*(Used text embedding models "sentence-transformers/all-MiniLM-L6-v2" & "BAAI/bge-small-en-v1.5" for reranking)*
 
 ### 3. Run Full Pipeline (CLI)
 

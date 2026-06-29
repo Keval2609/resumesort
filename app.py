@@ -17,7 +17,7 @@ st.set_page_config(
 )
 
 st.title("🤖 Redrob Candidate Ranker")
-st.caption("SignalOverNoise-108 | Senior AI Engineer — Founding Team")
+st.caption("SignalOverNoise-108 | Junior Machine Learning Engineer")
 
 st.markdown("""
 **Pipeline:** BM25 pre-filter → Hard gates → Honeypot detection → Full scoring → Ranked CSV  
