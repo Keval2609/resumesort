@@ -52,7 +52,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Pre-computation (Model Download)
+### 2. Pre-computation (Text Embedding Model Download)
 
 The ranking pipeline uses sentence-transformers which require offline access to models during the time-constrained phase. Pre-download the models:
 
