@@ -8,6 +8,18 @@ import streamlit as st
 from bm25 import JD_QUERY, build_index, tokenize
 from reasoning import generate_reasoning
 from scorer import final_score
+from reranker import semantic_rerank
+from cohort import cohort_rerank
+
+
+def enforce_monotone(results: list[dict]) -> list[dict]:
+    if not results:
+        return results
+    for i in range(1, len(results)):
+        if results[i]["final"] > results[i - 1]["final"]:
+            results[i]["final"] = results[i - 1]["final"]
+    return results
+
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -20,8 +32,8 @@ st.title("🤖 Redrob Candidate Ranker")
 st.caption("SignalOverNoise-108 | Junior Machine Learning Engineer")
 
 st.markdown("""
-**Pipeline:** BM25 pre-filter → Hard gates → Honeypot detection → Full scoring → Ranked CSV  
-**Formula:** `FinalScore = 0.75 × RelevanceScore + 0.25 × BehavioralScore`  
+**Pipeline:** BM25 pre-filter → Hard gates → Honeypot detection → Full scoring → Semantic Rerank → Cohort Rerank → Ranked CSV  
+**Formula:** `FinalScore = 0.75 × RelevanceScore + 0.25 × BehavioralScore + Synergies`  
 > Sandbox accepts ≤100 candidates. Full 100K run happens locally.
 """)
 
@@ -75,29 +87,43 @@ st.write(f"BM25 shortlist: **{len(to_score)}** candidates")
 
 with st.spinner("Scoring candidates..."):
     scored = [final_score(c) for c in to_score]
+    
+    # Sort initially before rerankers
+    scored.sort(key=lambda r: (-r["final"], r["candidate_id"]))
+    
+    candidates_by_id = {c["candidate_id"]: c for c in to_score}
+    
+    # ── Semantic Reranking ────────────────────────────────────────────────
+    try:
+        scored = semantic_rerank(scored, candidates_by_id, top_n=300)
+    except SystemExit:
+        st.warning("⚠️ Semantic reranking skipped: Local embedding models not found.")
+        
+    # ── Cohort Reranking ──────────────────────────────────────────────────
+    scored = cohort_rerank(scored, candidates_by_id, top_n=300)
+    
+    # Re-sort to ensure correct order after rerankings
     scored.sort(key=lambda r: (-r["final"], r["candidate_id"]))
 
     # Gate & honeypot stats
     honeypots  = sum(1 for r in scored if r["gate"] == "honeypot")
     not_open   = sum(1 for r in scored if r["gate"] == "not_open_to_work")
-    salary_out = sum(1 for r in scored if r["gate"] == "salary_too_high")
     mode_fail  = sum(1 for r in scored if r["gate"] == "work_mode_mismatch")
     active     = sum(1 for r in scored if r["gate"] is None)
 
     available  = [r for r in scored if r["gate"] != "honeypot"]
     top_k      = min(100, len(available))
-    top_results = available[:top_k]
+    top_results = enforce_monotone(available[:top_k])
 
 # ── Stats ─────────────────────────────────────────────────────────────────────
 st.divider()
 st.subheader("Pipeline Stats")
 
-col1, col2, col3, col4, col5 = st.columns(5)
+col1, col2, col3, col4 = st.columns(4)
 col1.metric("Active (scored)", active)
 col2.metric("Honeypots filtered", honeypots)
 col3.metric("Not open-to-work", not_open)
-col4.metric("Salary too high", salary_out)
-col5.metric("Work mode mismatch", mode_fail)
+col4.metric("Work mode mismatch", mode_fail)
 
 if honeypots > 0:
     hp_rate = honeypots / len(candidates) * 100
@@ -123,6 +149,8 @@ with st.spinner("Generating reasoning strings..."):
             "score":        round(r["final"], 4),
             "relevance":    r.get("relevance", 0),
             "behavioral":   r.get("behavioral", 0),
+            "semantic_sim": r.get("semantic_sim", 0.0),
+            "cohort_boost": r.get("cohort_boost", 0.0),
             "gate":         r.get("gate") or "✓",
             "reasoning_preview": reasoning[:80] + "...",
         })
@@ -133,7 +161,6 @@ csv_bytes = output.getvalue().encode("utf-8")
 st.divider()
 st.subheader(f"Top {len(top_results)} Rankings")
 
-import pandas as pd
 df = pd.DataFrame(rows_for_table)
 st.dataframe(df, use_container_width=True, height=400)
 
