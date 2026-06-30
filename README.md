@@ -22,16 +22,17 @@ Formula: `FinalScore = 0.75 × RelevanceScore + 0.25 × BehavioralScore + Synerg
 resumesort/
 ├── rank.py                   # Main CLI — orchestrates the full pipeline
 ├── app.py                    # Streamlit sandbox (≤100 candidates, interactive)
-├── bm25.py                   # BM25 inverted index for fast pre-filtering
-├── scorer.py                 # Core scorer (Relevance + Behavioral + Synergies)
-├── synergy.py                # Additive synergy bonuses and penalties
-├── reranker.py               # Semantic reranking with sentence-transformers
-├── cohort.py                 # Cohort-aware relative scoring
-├── honeypot.py               # Synthetic profile detector (standalone CLI + library)
-├── reasoning.py              # Spec-compliant reasoning generator
 ├── download_models.py        # Pre-computes offline models for reranker
 ├── submission_metadata.yaml  # Team metadata, methodology, compute declarations
 ├── requirements.txt          # Python dependencies
+├── src/                      # Helper modules
+│   ├── bm25.py               # BM25 inverted index for fast pre-filtering
+│   ├── scorer.py             # Core scorer (Relevance + Behavioral + Synergies)
+│   ├── synergy.py            # Additive synergy bonuses and penalties
+│   ├── reranker.py           # Semantic reranking with sentence-transformers
+│   ├── cohort.py             # Cohort-aware relative scoring
+│   ├── honeypot.py           # Synthetic profile detector (standalone CLI + library)
+│   └── reasoning.py          # Spec-compliant reasoning generator
 └── .gitignore
 ```
 
@@ -126,7 +127,7 @@ Candidates are immediately excluded (score = 0.0) if they fail any gate:
 - `last_active_date` before `signup_date`  
 - Unrealistic junior expertise (e.g., ≥8 expert-level skills on a junior profile acts as a supporting signal)
 
-> `honeypot.py` standalone CLI uses a lower threshold of **0.40** for broader audit use. The ranking pipeline always uses 0.65 from `scorer.py`.
+> `src/honeypot.py` standalone CLI uses a lower threshold of **0.40** for broader audit use. The ranking pipeline always uses 0.65 from `src/scorer.py`.
 
 ### Stage 4 — Scoring
 
