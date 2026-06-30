@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 
 # ── local pipeline modules ────────────────────────────────────────────────────
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent / "src"))
 from bm25 import build_index, tokenize, JD_QUERY
 from scorer import final_score
 from reasoning import generate_reasoning
