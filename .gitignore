@@ -39,5 +39,5 @@ validate_submission.py
 *.json
 graphify-out
 .pytest_cache
-New folder
+Newfolder
 tests
